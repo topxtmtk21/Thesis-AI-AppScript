@@ -16,11 +16,12 @@ class PDFHighlighter:
         """
         highlights_dict format:
         {
-            "yellow": ["exact quote 1", "exact quote 2"],
-            "blue": ["exact method quote"],
+            "yellow": ["exact quote 1 (p. 15)", "exact quote 2 (p. 2)"],
+            "blue": ["exact method quote (p. 10)"],
             ...
         }
         """
+        import re
         if not os.path.exists(input_path):
             raise FileNotFoundError(f"Khong tim thay file {input_path}")
             
@@ -36,13 +37,31 @@ class PDFHighlighter:
                 if not quote or len(quote) < 10:
                     continue # Bỏ qua các chuỗi quá ngắn để tránh highlight nhầm
                     
-                # Quét từng trang
-                for page in doc:
-                    # Tìm toạ độ của chuỗi văn bản
-                    text_instances = page.search_for(quote)
+                # Extract page number using regex, e.g., (p. 15) or (page 15)
+                page_match = re.search(r'\((?:p\.|page)\s*(\d+)\)\s*$', quote, re.IGNORECASE)
+                
+                search_text = quote
+                target_page_idx = -1
+                
+                if page_match:
+                    try:
+                        # doc pages are 0-indexed, so subtract 1
+                        target_page_idx = int(page_match.group(1)) - 1
+                        # Remove the page number part from the search string to match the raw text
+                        search_text = quote[:page_match.start()].strip()
+                    except ValueError:
+                        pass
+                
+                if target_page_idx >= 0 and target_page_idx < len(doc):
+                    # Search only on the specified page
+                    pages_to_search = [doc[target_page_idx]]
+                else:
+                    # Fallback to searching all pages if page number is missing or invalid
+                    pages_to_search = doc
                     
+                for page in pages_to_search:
+                    text_instances = page.search_for(search_text)
                     for inst in text_instances:
-                        # Thêm annotation highlight
                         highlight = page.add_highlight_annot(inst)
                         highlight.set_colors(stroke=color_rgb)
                         highlight.update()

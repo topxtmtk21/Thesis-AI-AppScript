@@ -94,7 +94,22 @@ async def analyze_pdf_blob(
             kg.add_node(ref, group=2)
             kg.add_relation(authors_year, ref, "cites")
         kg.save_graph()
-        
+        # 6. Highlight PDF and Upload to Drive
+        try:
+            from app.services.pdf_service import PDFHighlighter
+            from app.services.drive_service import DriveManager
+            drive = DriveManager()
+            
+            temp_output = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+            temp_output.close()
+            
+            highlighter = PDFHighlighter()
+            highlighter.highlight_pdf(temp_input.name, temp_output.name, result_json.get("highlight_quotes", {}))
+            
+            drive.upload_file_to_processed(temp_output.name, file.filename.replace(".pdf", "_highlighted.pdf"))
+        except Exception as e:
+            print(f"Warning: Failed to highlight or upload to Drive: {e}")
+            
         return {"status": "success", "data": result_json}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
