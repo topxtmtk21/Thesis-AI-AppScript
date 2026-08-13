@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Academic AI Dashboard</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <!-- CSS -->
+    <link rel="stylesheet" href="style.css">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Nền sinh động -->
+    <div class="bg-shape bg-shape-1"></div>
+    <div class="bg-shape bg-shape-2"></div>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="sidebar glass-panel">
+            <div class="logo">
+                <i class="fa-solid fa-atom"></i>
+                <span>Academic AI</span>
+            </div>
+            <ul class="nav-links">
+                <li class="active" onclick="switchTab('documents')">
+                    <i class="fa-solid fa-file-lines"></i>
+                    <span>Tài liệu đã lưu</span>
+                </li>
+                <li onclick="switchTab('upload')">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <span>Tải lên (Upload)</span>
+                </li>
+                <li onclick="switchTab('graph')">
+                    <i class="fa-solid fa-diagram-project"></i>
+                    <span>Đồ thị Tri thức</span>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="topbar glass-panel">
+                <h2 id="page-title">Tài liệu đã lưu</h2>
+                <div class="user-profile" style="display:flex; gap:10px; align-items:center;">
+                    <button class="settings-btn" onclick="openSettings()"><i class="fa-solid fa-gear"></i> Cài đặt</button>
+                    <button class="send-btn" onclick="loadDocuments()"><i class="fa-solid fa-rotate"></i> Load</button>
+                    <div class="avatar">
+                        <i class="fa-solid fa-user-graduate"></i>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Documents View -->
+            <section id="view-documents" class="view-section active">
+                <div class="table-container glass-panel">
+                    <div style="margin-bottom: 10px; display: flex; gap: 10px;">
+                        <button class="send-btn" onclick="exportDocs('md')"><i class="fa-brands fa-markdown"></i> Xuất .MD</button>
+                        <button class="send-btn" onclick="exportDocs('docx')"><i class="fa-solid fa-file-word"></i> Xuất .DOCX</button>
+                        <button class="send-btn" onclick="exportDocs('xlsx')"><i class="fa-solid fa-file-excel"></i> Xuất .XLSX</button>
+                        <button class="send-btn" onclick="exportRis()"><i class="fa-solid fa-book-bookmark"></i> Xuất RIS (Zotero)</button>
+                    </div>
+                    <table id="docs-table">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="select-all" onclick="toggleSelectAll()"></th>
+                                <th>Tên File</th>
+                                <th>Tác giả</th>
+                                <th>Lý thuyết</th>
+                                <th>Phương pháp</th>
+                                <th>Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody id="docs-body">
+                            <!-- Data will be loaded here via JS -->
+                            <tr><td colspan="5" style="text-align:center;">Đang tải dữ liệu...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Upload View -->
+            <section id="view-upload" class="view-section">
+                <div class="glass-panel" style="padding: 30px; text-align: center; border: 2px dashed rgba(255, 255, 255, 0.4); border-radius: 15px;" id="drop-zone" ondragover="event.preventDefault()" ondrop="handleDrop(event)">
+                    <i class="fa-solid fa-cloud-arrow-up" style="font-size: 48px; color: var(--primary); margin-bottom: 15px;"></i>
+                    <h3>Kéo thả file PDF vào đây</h3>
+                    <p style="color: var(--text-muted); margin-top: 10px;">Hoặc</p>
+                    <input type="file" id="file-upload" accept=".pdf" style="display: none;" onchange="handleFileSelect(event)">
+                    <button class="send-btn" style="margin-top: 15px;" onclick="document.getElementById('file-upload').click()">Chọn file từ máy tính</button>
+                    
+                    <div id="upload-status" style="margin-top: 20px; font-weight: bold; color: var(--accent);"></div>
+                </div>
+            </section>
+
+            <!-- Knowledge Graph View -->
+            <section id="view-graph" class="view-section">
+                <div class="graph-container glass-panel">
+                    <iframe src="knowledge_graph.html" frameborder="0" id="graph-frame"></iframe>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Floating Chatbot -->
+    <div class="chat-widget">
+        <button class="chat-toggle-btn" onclick="toggleChat()">
+            <i class="fa-solid fa-message"></i>
+        </button>
+        <div class="chat-window glass-panel" id="chat-window">
+            <div class="chat-header">
+                <h3><i class="fa-solid fa-robot"></i> Trợ lý RAG</h3>
+                <button onclick="toggleChat()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="chat-body" id="chat-history">
+                <div class="message bot">Xin chào! Tôi có thể giúp bạn tra cứu thông tin từ kho luận án. Bạn muốn hỏi gì?</div>
+            </div>
+            <div class="chat-input-area">
+                <div style="display:flex; gap:5px;">
+                    <input type="text" id="chat-input" placeholder="Hỏi gì đó..." onkeypress="if(event.key === 'Enter') sendMessage()" class="glass-input">
+                    <button class="send-btn" onclick="sendMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Settings -->
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-sliders"></i> Cài đặt Hệ thống</h3>
+                <button onclick="closeSettings()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Backend URL (Ngrok / Render)</label>
+                    <input type="text" id="global-backend-url" placeholder="https://..." class="glass-input">
+                </div>
+                <div class="form-group">
+                    <label>Gemini API Key</label>
+                    <input type="password" id="global-gemini-key" placeholder="AI Studio Key..." class="glass-input">
+                </div>
+                <div class="form-group">
+                    <label>Pinecone API Key</label>
+                    <input type="password" id="global-pinecone-key" placeholder="Vector DB Key..." class="glass-input">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-btn" onclick="closeSettings()">Hủy</button>
+                <button class="save-btn" onclick="saveSettings()">Lưu Cấu Hình</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

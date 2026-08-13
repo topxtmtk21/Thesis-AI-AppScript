@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; padding: 10px; display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; }
+      #chat-history { flex-grow: 1; overflow-y: auto; margin-bottom: 10px; border: 1px solid #ccc; padding: 10px; border-radius: 5px; background: #f9f9f9; }
+      .message { margin-bottom: 10px; padding: 8px; border-radius: 8px; max-width: 90%; }
+      .user-msg { background: #d1e7dd; align-self: flex-end; margin-left: auto; border: 1px solid #badbcc; }
+      .bot-msg { background: #e2e3e5; align-self: flex-start; margin-right: auto; border: 1px solid #d3d6d8; white-space: pre-wrap; }
+      .loading { font-style: italic; color: #666; }
+      #input-area { display: flex; gap: 5px; }
+      #question { flex-grow: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+      button { padding: 8px 12px; background: #0d6efd; color: white; border: none; border-radius: 4px; cursor: pointer; }
+      button:hover { background: #0b5ed7; }
+    </style>
+  </head>
+  <body>
+    <h3 style="margin-top: 0;">Trợ lý AI (RAG)</h3>
+    <div id="chat-history">
+      <div class="message bot-msg">Xin chào! Tôi có thể giúp bạn tìm kiếm và trả lời các thông tin dựa trên dữ liệu luận án đã lưu. Bạn muốn hỏi gì?</div>
+    </div>
+    <div id="input-area">
+      <input type="text" id="question" placeholder="Nhập câu hỏi..." onkeypress="if(event.key === 'Enter') askQuestion()">
+      <button onclick="askQuestion()">Gửi</button>
+    </div>
+
+    <script>
+      function appendMessage(sender, text, isHtml = false) {
+        const history = document.getElementById('chat-history');
+        const div = document.createElement('div');
+        div.className = 'message ' + (sender === 'user' ? 'user-msg' : 'bot-msg');
+        if(isHtml) {
+          div.innerHTML = text;
+        } else {
+          div.textContent = text;
+        }
+        history.appendChild(div);
+        history.scrollTop = history.scrollHeight;
+        return div;
+      }
+
+      function askQuestion() {
+        const input = document.getElementById('question');
+        const text = input.value.trim();
+        if (!text) return;
+        
+        appendMessage('user', text);
+        input.value = '';
+        input.disabled = true;
+        
+        const loadingDiv = appendMessage('bot', 'Đang tìm kiếm...', false);
+        loadingDiv.classList.add('loading');
+        
+        google.script.run
+          .withSuccessHandler(function(response) {
+            loadingDiv.remove();
+            appendMessage('bot', response.answer);
+            input.disabled = false;
+            input.focus();
+          })
+          .withFailureHandler(function(error) {
+            loadingDiv.remove();
+            appendMessage('bot', '❌ Lỗi: ' + error.message);
+            input.disabled = false;
+            input.focus();
+          })
+          .processChat(text);
+      }
+    </script>
+  </body>
+</html>

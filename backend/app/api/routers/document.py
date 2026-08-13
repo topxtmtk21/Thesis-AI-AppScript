@@ -1,0 +1,157 @@
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi.responses import FileResponse
+from typing import List, Dict, Any
+import tempfile
+import fitz
+import os
+
+from app.models.schemas import ExportRequest, ExportRisRequest, AnalyzeDocumentRequest
+from app.services.export_service import DocumentExporter
+from app.services.pdf_service import PDFHighlighter
+from app.services.gemini_service import GeminiService
+from app.services.pinecone_service import PineconeManager
+from app.services.drive_service import DriveManager
+from app.services.graph_service import KnowledgeGraphManager
+
+router = APIRouter()
+db_instances = {}
+
+def get_db(pinecone_key: str, gemini_key: str):
+    if pinecone_key not in db_instances:
+        db_instances[pinecone_key] = PineconeManager(pinecone_key, gemini_key)
+    return db_instances[pinecone_key]
+
+@router.post("/analyze-and-process")
+def analyze_and_process(req: AnalyzeDocumentRequest):
+    try:
+        gemini = GeminiService(req.api_key)
+        db = get_db(req.pinecone_api_key, req.api_key)
+        kg = KnowledgeGraphManager()
+        
+        result_json = gemini.analyze_document(req.text)
+        
+        db.add_document({
+            "filename": req.filename,
+            "text": req.text,
+            "authors": result_json.get("authors", ""),
+            "year": result_json.get("year", ""),
+            "theory": result_json.get("theory", ""),
+            "methodology": result_json.get("methodology", "")
+        })
+        
+        authors_year = f'{result_json.get("authors", "")} ({result_json.get("year", "")})'
+        kg.add_node(authors_year, title=result_json.get("title", ""), group=1)
+        for ref in result_json.get("references", []):
+            kg.add_node(ref, group=2)
+            kg.add_relation(authors_year, ref, "cites")
+        kg.save_graph()
+        
+        return {"status": "success", "data": result_json}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/documents")
+def get_documents(api_key: str, pinecone_api_key: str):
+    try:
+        db = get_db(pinecone_api_key, api_key)
+        docs = db.get_all_documents()
+        return {"status": "success", "documents": docs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/export")
+def export_docs(req: ExportRequest):
+    try:
+        if req.format == 'md':
+            md_content = DocumentExporter.export_md(req.documents)
+            return {"status": "success", "data": md_content, "filename": "exported_documents.md"}
+        elif req.format == 'docx':
+            path = DocumentExporter.export_docx(req.documents)
+            return FileResponse(path=path, filename="exported_documents.docx")
+        elif req.format == 'xlsx':
+            path = DocumentExporter.export_xlsx(req.documents)
+            return FileResponse(path=path, filename="exported_documents.xlsx")
+        else:
+            raise HTTPException(status_code=400, detail="Invalid format")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/export-ris")
+def export_ris(req: ExportRisRequest):
+    try:
+        ris_content = DocumentExporter.export_ris(req.dict())
+        return {"status": "success", "ris": ris_content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/upload-pdf")
+async def upload_pdf(
+    file: UploadFile = File(...),
+    api_key: str = Form(...),
+    pinecone_api_key: str = Form(...)
+):
+    try:
+        # 1. Khởi tạo các Service
+        gemini = GeminiService(api_key)
+        db = get_db(pinecone_api_key, api_key)
+        kg = KnowledgeGraphManager()
+        drive = None
+        try:
+            drive = DriveManager()
+        except:
+            pass # Bỏ qua nếu không có credentials.json
+
+        # 2. Đọc file
+        temp_input = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        content = await file.read()
+        temp_input.write(content)
+        temp_input.close()
+        
+        doc = fitz.open(temp_input.name)
+        text = "".join(page.get_text() for page in doc)
+        doc.close()
+        
+        if not text.strip():
+            raise HTTPException(status_code=400, detail="Không thể trích xuất chữ từ PDF.")
+
+        # 3. Phân tích văn bản qua Gemini
+        result_json = gemini.analyze_document(text)
+        
+        # 4. Lưu vào Vector DB (Pinecone)
+        doc_id = db.add_document({
+            "filename": file.filename,
+            "text": text,
+            "authors": result_json.get("authors", ""),
+            "year": result_json.get("year", ""),
+            "theory": result_json.get("theory", ""),
+            "methodology": result_json.get("methodology", "")
+        })
+
+        # 5. Lưu vào Đồ thị Tri thức (Reference Graph)
+        authors_year = f'{result_json.get("authors", "")} ({result_json.get("year", "")})'
+        kg.add_node(authors_year, title=result_json.get("title", ""), group=1)
+        for ref in result_json.get("references", []):
+            kg.add_node(ref, group=2)
+            kg.add_relation(authors_year, ref, "cites")
+        kg.save_graph()
+
+        # 6. Tô màu PDF (Highlight)
+        temp_output = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        temp_output.close()
+        
+        highlighter = PDFHighlighter()
+        highlighter.highlight_pdf(temp_input.name, temp_output.name, result_json.get("highlight_quotes", {}))
+        
+        # 7. Lưu lên Google Drive (Nếu có cấu hình)
+        if drive:
+            drive.upload_file_to_processed(temp_output.name, file.filename.replace(".pdf", "_highlighted.pdf"))
+
+        # Trả file về cho Frontend
+        return FileResponse(
+            path=temp_output.name, 
+            filename=file.filename.replace(".pdf", "_highlighted.pdf"), 
+            media_type="application/pdf"
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

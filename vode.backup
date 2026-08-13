@@ -1,0 +1,361 @@
+// =================================================================
+// 🖥️ 1. TẠO MENU GIAO DIỆN TRÊN GOOGLE SHEETS
+// =================================================================
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('🤖 Công cụ Luận án')
+    .addItem('🚀 1. Khởi tạo Bảng dữ liệu', 'setupSheet')
+    .addItem('⚙️ 2. Cấu hình API Key & Folder ID', 'configureSettings')
+    .addItem('⚡ 3. Chạy Phân tích Tài liệu', 'processNewDocuments')
+    .addItem('📋 4. Xem Cấu hình Hiện tại', 'showCurrentSettings')
+    .addSeparator()
+    .addItem('🔍 5. Kiểm tra lỗi API (Chẩn đoán)', 'runDiagnostics')
+    .addToUi();
+}
+
+// =================================================================
+// ⚙️ 2. GIAO DIỆN NHẬP & LƯU BẢO MẬT API KEY / FOLDER ID
+// =================================================================
+function configureSettings() {
+  const ui = SpreadsheetApp.getUi();
+  const userProperties = PropertiesService.getUserProperties();
+  
+  // 1. Nhập Gemini API Key
+  const currentApiKey = userProperties.getProperty('GEMINI_API_KEY') || '';
+  const apiKeyResponse = ui.prompt(
+    'Cấu hình Gemini API Key',
+    `Nhập Gemini API Key của bạn (Hiện tại: ${currentApiKey ? '***' + currentApiKey.slice(-4) : 'Chưa thiết lập'}):`,
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (apiKeyResponse.getSelectedButton() === ui.Button.OK) {
+    const newApiKey = apiKeyResponse.getResponseText().trim();
+    if (newApiKey) {
+      userProperties.setProperty('GEMINI_API_KEY', newApiKey);
+    }
+  } else {
+    return; // Người dùng nhấn Cancel
+  }
+
+  // 2. Nhập Google Drive Folder ID
+  const currentFolderId = userProperties.getProperty('FOLDER_ID') || '';
+  const folderResponse = ui.prompt(
+    'Cấu hình Thư mục Google Drive',
+    `Nhập Folder ID chứa tài liệu (Hiện tại: ${currentFolderId || 'Chưa thiết lập'}):`,
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (folderResponse.getSelectedButton() === ui.Button.OK) {
+    const newFolderId = folderResponse.getResponseText().trim();
+    if (newFolderId) {
+      userProperties.setProperty('FOLDER_ID', newFolderId);
+    }
+  } else {
+    return;
+  }
+
+  ui.alert('✅ Đã lưu cấu hình thành công! Thông tin này sẽ được bảo mật và dùng cho các lần chạy sau.');
+}
+
+// 📋 Xem cấu hình hiện tại
+function showCurrentSettings() {
+  const ui = SpreadsheetApp.getUi();
+  const userProperties = PropertiesService.getUserProperties();
+  const apiKey = userProperties.getProperty('GEMINI_API_KEY');
+  const folderId = userProperties.getProperty('FOLDER_ID');
+
+  const message = `📌 THÔNG TIN CẤU HÌNH HIỆN TẠI:\n\n` +
+    `• Gemini API Key: ${apiKey ? '✅ Đã lưu (***' + apiKey.slice(-4) + ')' : '❌ Chưa thiết lập'}\n` +
+    `• Drive Folder ID: ${folderId ? '✅ ' + folderId : '❌ Chưa thiết lập'}`;
+
+  ui.alert(message);
+}
+
+// =================================================================
+// 📐 3. HÀM KHỞI TẠO TIÊU ĐỀ CỘT & ĐỊNH DẠNG BẢNG
+// =================================================================
+function setupSheet() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  
+  const headers = [
+    [
+      "Tên File", 
+      "Tác giả & Năm", 
+      "Tạp chí/NXB",
+      "Trích dẫn APA 7th", 
+      "Khung lý thuyết", 
+      "Phương pháp nghiên cứu",
+      "Cỡ mẫu (Sample)",
+      "Kết quả chính",
+      "Research Gap", 
+      "Hạn chế (Limitations)",
+      "Trích dẫn gốc (Ngoại ngữ)",
+      "Trích dẫn (Dịch tiếng Việt)"
+    ]
+  ];
+  
+  const range = sheet.getRange(1, 1, 1, 12);
+  range.setValues(headers);
+  
+  range.setFontWeight("bold")
+       .setBackground("#d9ead3")
+       .setHorizontalAlignment("center");
+       
+  sheet.setColumnWidth(1, 150);
+  sheet.setColumnWidth(2, 120);
+  sheet.setColumnWidth(3, 150);
+  sheet.setColumnWidth(4, 250);
+  sheet.setColumnWidth(5, 200);
+  sheet.setColumnWidth(6, 150);
+  sheet.setColumnWidth(7, 100);
+  sheet.setColumnWidth(8, 200);
+  sheet.setColumnWidth(9, 200);
+  sheet.setColumnWidth(10, 200);
+  sheet.setColumnWidth(11, 250);
+  sheet.setColumnWidth(12, 250);
+  
+  SpreadsheetApp.getUi().alert("✅ Đã khởi tạo xong Bảng dữ liệu Luận án (Phiên bản Tiến sĩ)!");
+}
+
+// =================================================================
+// 🔄 4. TRÍCH XUẤT TEXT BẰNG GOOGLE DRIVE OCR
+// =================================================================
+function extractTextFromFile(fileId) {
+  const token = ScriptApp.getOAuthToken();
+  const copyUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/copy`;
+  
+  // Yêu cầu Drive tạo một bản sao dưới dạng Google Docs để kích hoạt OCR
+  const payload = {
+    "mimeType": "application/vnd.google-apps.document"
+  };
+  
+  const copyOptions = {
+    "method": "post",
+    "headers": {
+      "Authorization": "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    "payload": JSON.stringify(payload),
+    "muteHttpExceptions": true
+  };
+  
+  let newDocId = null;
+  try {
+    const response = UrlFetchApp.fetch(copyUrl, copyOptions);
+    if (response.getResponseCode() !== 200) {
+      throw new Error("Lỗi khi dùng Drive OCR: " + response.getContentText());
+    }
+    
+    const fileInfo = JSON.parse(response.getContentText());
+    newDocId = fileInfo.id;
+    
+    // Mở file Docs vừa tạo và lấy toàn bộ chữ
+    const doc = DocumentApp.openById(newDocId);
+    const text = doc.getBody().getText();
+    
+    return text;
+  } catch(e) {
+    throw e;
+  } finally {
+    // Dọn dẹp: Xóa file Google Docs tạm thời dù thành công hay lỗi
+    if (newDocId) {
+      const deleteUrl = `https://www.googleapis.com/drive/v3/files/${newDocId}`;
+      UrlFetchApp.fetch(deleteUrl, {
+        method: "delete",
+        headers: { "Authorization": "Bearer " + token },
+        muteHttpExceptions: true
+      });
+    }
+  }
+}
+
+// =================================================================
+// 🤖 5. QUÉT THƯ MỤC VÀ XỬ LÝ (PDF, DOCX, ẢNH)
+// =================================================================
+function processNewDocuments() {
+  const ui = SpreadsheetApp.getUi();
+  const userProperties = PropertiesService.getUserProperties();
+  
+  const apiKey = userProperties.getProperty('GEMINI_API_KEY');
+  const folderId = userProperties.getProperty('FOLDER_ID');
+
+  if (!apiKey || !folderId) {
+    ui.alert("⚠️ Bạn chưa cấu hình API Key hoặc Folder ID!");
+    return;
+  }
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const allowedMimeTypes = [
+    MimeType.PDF, 
+    MimeType.MICROSOFT_WORD, 
+    MimeType.JPEG, 
+    MimeType.PNG,
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  ];
+  
+  try {
+    const folder = DriveApp.getFolderById(folderId);
+    const files = folder.getFiles();
+    let processedCount = 0;
+    const MAX_FILES = 5; 
+
+    while (files.hasNext() && processedCount < MAX_FILES) {
+      const file = files.next();
+      
+      // Hỗ trợ cả PDF, Word, và ảnh chụp
+      if (!allowedMimeTypes.includes(file.getMimeType())) continue;
+      
+      if (file.getDescription() && file.getDescription().includes("PROCESSED")) continue;
+
+      const sheetApp = SpreadsheetApp.getActiveSpreadsheet();
+      
+      try {
+        // Bước 1: Trích xuất Text bằng Google Drive OCR
+        sheetApp.toast(`Đang bóc tách chữ từ: ${file.getName()}`, '⏳ Đang quét OCR', -1);
+        const textContext = extractTextFromFile(file.getId());
+        
+        if (!textContext || textContext.trim().length === 0) {
+           sheet.appendRow([file.getName(), "⚠️ KHÔNG CÓ KẾT QUẢ", "File rỗng hoặc hệ thống không thể trích xuất được chữ.", "", ""]);
+           file.setDescription("PROCESSED - Lỗi OCR - " + new Date().toISOString());
+           processedCount++;
+           continue;
+        }
+
+        // Bước 2: Nhờ Gemini phân tích đoạn Text nhẹ nhàng
+        sheetApp.toast(`Đang nhờ Gemini phân tích: ${file.getName()}`, '🤖 AI Đang chạy', -1);
+        const result = analyzeTextWithGemini(textContext, apiKey);
+        
+        if (result) {
+          sheet.appendRow([
+            file.getName(),
+            result.authorYear || "N/A",
+            result.journal || "N/A",
+            result.apa7 || "N/A",
+            result.theory || "N/A",
+            result.methodology || "N/A",
+            result.sampleSize || "N/A",
+            result.keyFindings || "N/A",
+            result.researchGap || "N/A",
+            result.limitations || "N/A",
+            result.originalQuote || "N/A",
+            result.translatedQuote || "N/A"
+          ]);
+        }
+        
+        file.setDescription("PROCESSED - " + new Date().toISOString());
+        processedCount++;
+
+      } catch (innerError) {
+         sheet.appendRow([file.getName(), "⚠️ LỖI XỬ LÝ", innerError.toString(), "", ""]);
+         file.setDescription("PROCESSED - Có lỗi - " + new Date().toISOString());
+         processedCount++;
+      }
+    }
+
+    if (files.hasNext()) {
+      ui.alert(`⏳ Đã phân tích ${processedCount} file.\n\nHãy chạy lại Menu > "Chạy Phân tích" để xử lý tiếp các file còn lại.`);
+    } else if (processedCount > 0) {
+      ui.alert(`🎉 Hoàn thành! Đã phân tích xong ${processedCount} tài liệu mới.`);
+    } else {
+      ui.alert(`✅ Không tìm thấy tài liệu mới nào cần phân tích trong thư mục.`);
+    }
+
+  } catch (e) {
+    ui.alert("❌ Đã xảy ra lỗi hệ thống: " + e.toString());
+  }
+}
+
+// =================================================================
+// 🧠 6. GỌI GEMINI API TRÍCH XUẤT NỘI DUNG TỪ TEXT
+// =================================================================
+function analyzeTextWithGemini(textContext, apiKey) {
+  // Vì chúng ta chỉ gửi TEXT cực nhẹ, model 1.5-flash sẽ chạy rất mượt
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  
+  const prompt = `Bạn là một Giáo sư hướng dẫn Tiến sĩ cực kỳ nghiêm khắc và uyên bác. Hãy đọc kỹ đoạn văn bản OCR của bài báo học thuật dưới đây.
+Bóc tách các thông tin học thuật chuẩn xác và BẮT BUỘC trả về ĐÚNG định dạng JSON (không markdown). Nếu không có thông tin, ghi "Không đề cập".
+
+{
+  "authorYear": "Tác giả và năm xuất bản (VD: Smith et al., 2023)",
+  "journal": "Tên tạp chí hoặc nhà xuất bản (VD: Journal of Marketing)",
+  "apa7": "Tạo trích dẫn hoàn chỉnh chuẩn APA 7th Edition cho bài báo này",
+  "theory": "Tóm tắt Khung lý thuyết (Theoretical framework) bằng tiếng Việt",
+  "methodology": "Phương pháp nghiên cứu (Định tính/Định lượng, mô hình, công cụ) bằng tiếng Việt",
+  "sampleSize": "Cỡ mẫu (Sample size) hoặc đối tượng nghiên cứu (VD: N = 350 sinh viên)",
+  "keyFindings": "Các kết quả chính của nghiên cứu bằng tiếng Việt",
+  "researchGap": "Khoảng trống nghiên cứu (Research Gap) mà bài báo chỉ ra",
+  "limitations": "Hạn chế của nghiên cứu (Limitations) và hướng nghiên cứu tương lai",
+  "originalQuote": "Trích dẫn NGUYÊN BẢN (Giữ nguyên ngôn ngữ gốc) một đoạn văn hoặc kết luận xuất sắc nhất của bài báo",
+  "translatedQuote": "Bản dịch tiếng Việt học thuật của trích dẫn nguyên bản trên"
+}
+
+--- BẮT ĐẦU VĂN BẢN ---
+${textContext.substring(0, 150000)} 
+--- KẾT THÚC VĂN BẢN ---`; 
+// Giới hạn 150,000 ký tự đầu tiên để đảm bảo không bị quá tải payload (tương đương 30-50 trang)
+
+  const payload = {
+    "contents": [{ "parts": [{ "text": prompt }] }],
+    "generationConfig": { "responseMimeType": "application/json" }
+  };
+
+  const options = {
+    "method": "post",
+    "contentType": "application/json",
+    "payload": JSON.stringify(payload),
+    "muteHttpExceptions": true
+  };
+
+  const response = UrlFetchApp.fetch(url, options);
+  
+  if (response.getResponseCode() !== 200) {
+    const errText = response.getContentText();
+    return {
+      authorYear: "⚠️ LỖI API", journal: "", apa7: "", theory: errText.substring(0, 200),
+      methodology: "", sampleSize: "", keyFindings: "", researchGap: "Vui lòng kiểm tra API",
+      limitations: "", originalQuote: "", translatedQuote: ""
+    };
+  }
+
+  const json = JSON.parse(response.getContentText());
+  if (json.candidates && json.candidates[0] && json.candidates[0].content.parts[0].text) {
+    let rawText = json.candidates[0].content.parts[0].text;
+    rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
+    return JSON.parse(rawText);
+  } else {
+    return { authorYear: "⚠️ LỖI TRÍCH XUẤT", journal: "", apa7: "", theory: "Không có dữ liệu", methodology: "", sampleSize: "", keyFindings: "", researchGap: "", limitations: "", originalQuote: "", translatedQuote: "" };
+  }
+}
+
+// =================================================================
+// 🚑 7. CÔNG CỤ CHẨN ĐOÁN LỖI API CHUYÊN SÂU
+// =================================================================
+function runDiagnostics() {
+  const ui = SpreadsheetApp.getUi();
+  const apiKey = PropertiesService.getUserProperties().getProperty('GEMINI_API_KEY');
+  
+  if (!apiKey) {
+    ui.alert("⚠️ Chưa có API Key. Vui lòng thiết lập API Key trước.");
+    return;
+  }
+  
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const payload = { "contents": [{ "parts": [{ "text": "Hello" }] }] };
+  
+  try {
+    const response = UrlFetchApp.fetch(url, {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+    
+    if (response.getResponseCode() === 200) {
+      ui.alert("✅ CHẨN ĐOÁN THÀNH CÔNG:\n\nAPI Key của bạn hoàn toàn hợp lệ và kết nối mạng rất tốt.\n\n👉 Nếu bạn vẫn bị lỗi khi phân tích, hãy kiểm tra lại file của bạn (ví dụ: bị đặt mật khẩu).");
+    } else {
+      ui.alert("❌ PHÁT HIỆN LỖI API KEY:\n\n" + response.getContentText());
+    }
+  } catch (e) {
+    ui.alert("❌ LỖI HỆ THỐNG:\n\n" + e.toString());
+  }
+}
