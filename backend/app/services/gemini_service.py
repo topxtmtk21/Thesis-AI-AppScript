@@ -85,9 +85,8 @@ LƯU Ý: Các mục trong "highlight_quotes" bắt buộc phải TRÍCH DẪN NG
     )
     def analyze_pdf_native(self, pdf_path: str) -> dict:
         pdf_file = self.client.files.upload(file=pdf_path)
-        prompt = """Bạn là một Giáo sư hướng dẫn Tiến sĩ cực kỳ nghiêm khắc. Đọc kỹ văn bản bài báo học thuật dưới đây.
-Đặc biệt chú ý đến các BẢNG BIỂU (Tables) và HÌNH ẢNH (Figures) để trích xuất số liệu thống kê quan trọng (p-value, R-square, hệ số beta...).
-Bóc tách thông tin BẮT BUỘC theo ĐÚNG định dạng JSON sau (không dùng markdown).
+        prompt = """Bạn là Giáo sư hướng dẫn Tiến sĩ cực kỳ nghiêm khắc. Đọc kỹ văn bản bài báo học thuật dưới đây (chú ý BẢNG BIỂU và HÌNH ẢNH để trích xuất số liệu quan trọng).
+Bóc tách thông tin BẮT BUỘC theo ĐÚNG định dạng JSON sau (không dùng markdown):
 
 {
   "authors": "Tác giả",
@@ -95,27 +94,27 @@ Bóc tách thông tin BẮT BUỘC theo ĐÚNG định dạng JSON sau (không d
   "authorYear": "Tên tác giả và năm xuất bản (VD: Smith et al., 2023)",
   "title": "Tựa đề bài báo",
   "journal": "Tên tạp chí",
-  "apa7": "Trích dẫn chuẩn APA 7th của bài báo này",
-  "theory": "Tóm tắt Khung lý thuyết bằng tiếng Việt",
-  "methodology": "Phương pháp nghiên cứu bằng tiếng Việt",
-  "sampleSize": "Quy mô mẫu (Sample Size) bằng tiếng Việt",
-  "keyFindings": "Các kết quả chính bằng tiếng Việt (Bao gồm số liệu thống kê quan trọng từ các Bảng/Hình ảnh)",
-  "researchGap": "Khoảng trống nghiên cứu (Research Gap) bằng tiếng Việt",
-  "limitations": "Hạn chế của nghiên cứu (Limitations) bằng tiếng Việt",
-  "originalQuote": "Một câu trích dẫn nguyên văn xuất sắc và quan trọng nhất (bằng tiếng Anh)",
+  "apa7": "Trích dẫn chuẩn APA 7th",
+  "theory": "Tóm tắt Khung lý thuyết (Tiếng Việt)",
+  "methodology": "Phương pháp nghiên cứu (Tiếng Việt)",
+  "sampleSize": "Quy mô mẫu (Tiếng Việt)",
+  "keyFindings": "Các kết quả chính (Bao gồm số liệu thống kê quan trọng) (Tiếng Việt)",
+  "researchGap": "Khoảng trống nghiên cứu (Tiếng Việt)",
+  "limitations": "Hạn chế nghiên cứu (Tiếng Việt)",
+  "originalQuote": "Một câu trích dẫn nguyên văn xuất sắc nhất (Tiếng Anh)",
   "translatedQuote": "Bản dịch tiếng Việt của câu trích dẫn trên",
   "full_bibliography": ["Trích dẫn 1 chi tiết...", "Trích dẫn 2 chi tiết..."],
   "references": ["Bài báo trích dẫn 1", "Bài báo trích dẫn 2"],
   "highlight_quotes": {
-    "yellow": ["Trích dẫn nguyên văn bằng Tiếng Anh thể hiện khái niệm cốt lõi (Main Ideas) có kèm theo số trang, ví dụ: 'Quote' (p. 2)"],
-    "blue": ["Trích dẫn nguyên văn bằng Tiếng Anh về Phương pháp/Data có kèm số trang"],
-    "green": ["Trích dẫn nguyên văn bằng Tiếng Anh về Kết quả chính có kèm số trang"],
-    "red": ["Trích dẫn nguyên văn bằng Tiếng Anh về Khoảng trống/Hạn chế có kèm số trang"],
-    "purple": ["Trích dẫn nguyên văn xuất sắc nhất của bài báo có kèm số trang"],
-    "orange": ["Trích dẫn nguyên văn bằng Tiếng Anh về Hướng nghiên cứu tương lai có kèm số trang"]
+    "yellow": ["Trích dẫn cốt lõi (Main Ideas) (p. X)"],
+    "blue": ["Trích dẫn Phương pháp/Data (p. X)"],
+    "green": ["Trích dẫn Kết quả chính (p. X)"],
+    "red": ["Trích dẫn Khoảng trống/Hạn chế (p. X)"],
+    "purple": ["Trích dẫn xuất sắc nhất (p. X)"],
+    "orange": ["Trích dẫn Hướng nghiên cứu tương lai (p. X)"]
   }
 }
-LƯU Ý: Các mục trong "highlight_quotes" bắt buộc phải TRÍCH DẪN NGUYÊN VĂN 100% (COPY Y HỆT) từ văn bản và nối thêm số trang (ví dụ: (p. 15))."""
+LƯU Ý: Mục "highlight_quotes" bắt buộc COPY Y HỆT từ văn bản và nối thêm số trang (VD: (p. 15)). Không trích dẫn quá dài, mỗi mục tối đa 2 câu để hệ thống chạy nhanh."""
         
         response = self.client.models.generate_content(
             model=self.model_name,
