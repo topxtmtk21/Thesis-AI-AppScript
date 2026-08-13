@@ -11,7 +11,7 @@ def chat_with_data(req: ChatRequest):
         db = get_db(req.pinecone_api_key, req.api_key)
         
         # Lấy ngữ cảnh từ Pinecone
-        results = db.search(req.question, top_k=3)
+        results = db.search(req.question, top_k=3, filename=req.filename)
         context = ""
         if results and "matches" in results:
             for i, match in enumerate(results["matches"]):
@@ -31,7 +31,10 @@ Hãy trả lời câu hỏi của sinh viên: {req.question}
 Nếu ngữ cảnh không có thông tin, hãy nói rõ và trả lời theo kiến thức của bạn."""
 
         gemini = GeminiService(req.api_key)
-        response = gemini.model.generate_content(prompt)
+        response = gemini.client.models.generate_content(
+            model=gemini.model_name,
+            contents=prompt
+        )
         
         return {"status": "success", "answer": response.text}
     except Exception as e:

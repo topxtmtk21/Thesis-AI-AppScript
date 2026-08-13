@@ -8,6 +8,22 @@ function doGet(e) {
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    if (data.ngrokUrl) {
+      PropertiesService.getUserProperties().setProperty('BACKEND_URL', data.ngrokUrl);
+      return ContentService.createTextOutput(JSON.stringify({status: "success", message: "Updated BACKEND_URL"}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    return ContentService.createTextOutput(JSON.stringify({status: "error", message: "Missing ngrokUrl"}))
+        .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({status: "error", message: error.toString()}))
+        .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
 // =================================================================
 // 🖥️ 1. TẠO MENU GIAO DIỆN TRÊN GOOGLE SHEETS
 // =================================================================
@@ -18,11 +34,16 @@ function onOpen() {
     .addItem('⚙️ 2. Cấu hình API Key & Folder ID', 'configureSettings')
     .addItem('🔗 3. Cập nhật Link Backend (Ngrok)', 'configureBackendUrl')
     .addItem('⚡ 4. Chạy Phân tích Tài liệu', 'processNewDocuments')
+    .addItem('⚡ 4b. Phân tích Nâng cao (Có trang & Tham khảo)', 'processDocumentsAdvanced')
     .addItem('📋 5. Xem Cấu hình Hiện tại', 'showCurrentSettings')
     .addSeparator()
     .addItem('🔍 6. Kiểm tra lỗi API (Chẩn đoán)', 'runDiagnostics')
     .addSeparator()
     .addItem('💬 7. Chat với Trợ lý AI (RAG)', 'openChatSidebar')
+    .addSeparator()
+    .addItem('🧠 8. Tổng hợp Literature Review (Matrix Synthesis)', 'generateMatrixSynthesis')
+    .addItem('📥 9. Xuất file RIS (Zotero/EndNote)', 'exportRis')
+    .addItem('🕸️ 10. Xem Đồ thị Kiến thức (Knowledge Graph)', 'showKnowledgeGraph')
     .addToUi();
 }
 
@@ -149,11 +170,12 @@ function setupSheet() {
       "Research Gap", 
       "Hạn chế (Limitations)",
       "Trích dẫn gốc (Ngoại ngữ)",
-      "Trích dẫn (Dịch tiếng Việt)"
+      "Trích dẫn (Dịch tiếng Việt)",
+      "Danh mục Tham khảo (References)"
     ]
   ];
   
-  const range = sheet.getRange(1, 1, 1, 12);
+  const range = sheet.getRange(1, 1, 1, 13);
   range.setValues(headers);
   
   range.setFontWeight("bold")
@@ -172,6 +194,7 @@ function setupSheet() {
   sheet.setColumnWidth(10, 200);
   sheet.setColumnWidth(11, 250);
   sheet.setColumnWidth(12, 250);
+  sheet.setColumnWidth(13, 300);
   
   SpreadsheetApp.getUi().alert("✅ Đã khởi tạo xong Bảng dữ liệu Luận án (Phiên bản Tiến sĩ)!");
 }
@@ -403,7 +426,7 @@ function openChatSidebar() {
   SpreadsheetApp.getUi().showSidebar(html);
 }
 
-function processChat(question) {
+function processChat(question, useSpecificFile = false) {
   const userProperties = PropertiesService.getUserProperties();
   const backendUrl = userProperties.getProperty('BACKEND_URL');
   const apiKey = userProperties.getProperty('GEMINI_API_KEY');
@@ -412,11 +435,21 @@ function processChat(question) {
   if (!backendUrl || !apiKey || !pineconeKey) {
     throw new Error("Bạn chưa cấu hình đủ Backend URL hoặc các API Key!");
   }
+  
+  let specificFilename = null;
+  if (useSpecificFile) {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    const activeRow = sheet.getActiveCell().getRow();
+    if (activeRow > 1) {
+      specificFilename = sheet.getRange(activeRow, 1).getValue();
+    }
+  }
 
   const payload = {
     question: question,
     api_key: apiKey,
-    pinecone_api_key: pineconeKey
+    pinecone_api_key: pineconeKey,
+    filename: specificFilename
   };
 
   const response = UrlFetchApp.fetch(backendUrl + "/api/chat", {
@@ -448,4 +481,304 @@ function saveConfigToProperties(backendUrl, geminiKey, pineconeKey) {
   if (geminiKey) userProperties.setProperty('GEMINI_API_KEY', geminiKey);
   if (pineconeKey) userProperties.setProperty('PINECONE_API_KEY', pineconeKey);
   return true;
+}
+// =================================================================
+// 🚀 6. PHÂN TÍCH NÂNG CAO (GỬI TRỰC TIẾP PDF ĐỂ LẤY SỐ TRANG)
+// =================================================================
+function processDocumentsAdvanced() {
+  const ui = SpreadsheetApp.getUi();
+  const userProperties = PropertiesService.getUserProperties();
+  
+  const apiKey = userProperties.getProperty('GEMINI_API_KEY');
+  const folderId = userProperties.getProperty('FOLDER_ID');
+  const backendUrl = userProperties.getProperty('BACKEND_URL');
+  const pineconeKey = userProperties.getProperty('PINECONE_API_KEY');
+
+  if (!apiKey || !folderId || !pineconeKey) {
+    ui.alert("⚠️ Bạn chưa cấu hình đủ API Key (Gemini, Pinecone) hoặc Folder ID!");
+    return;
+  }
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const allowedMimeTypes = [MimeType.PDF]; 
+  
+  try {
+    let folder;
+    try {
+      folder = DriveApp.getFolderById(folderId);
+    } catch (e) {
+      ui.alert(`❌ LỖI TÌM THƯ MỤC:\nKhông thể tìm thấy thư mục có ID: "${folderId}".`);
+      return;
+    }
+    const files = folder.getFiles();
+    let processedCount = 0;
+    const MAX_FILES = 5; 
+
+    while (files.hasNext() && processedCount < MAX_FILES) {
+      const file = files.next();
+      
+      if (!allowedMimeTypes.includes(file.getMimeType())) continue;
+      if (file.getDescription() && file.getDescription().includes("PROCESSED_ADVANCED")) continue;
+
+      const sheetApp = SpreadsheetApp.getActiveSpreadsheet();
+      
+      try {
+        if (!backendUrl) {
+          ui.alert("⚠️ Bạn chưa cấu hình Backend URL!");
+          return;
+        }
+        
+        sheetApp.toast(`Đang upload PDF sang Backend để phân tích: ${file.getName()}`, '🤖 Đang xử lý', -1);
+        
+        const payload = {
+          file: file.getBlob(),
+          api_key: apiKey,
+          pinecone_api_key: pineconeKey
+        };
+        
+        const response = UrlFetchApp.fetch(backendUrl + "/api/analyze-pdf-blob", {
+          method: "post",
+          headers: { 'ngrok-skip-browser-warning': '69420' },
+          payload: payload,
+          muteHttpExceptions: true
+        });
+        
+        if (response.getResponseCode() !== 200) {
+           sheet.appendRow([file.getName(), "⚠️ LỖI BACKEND", response.getContentText(), "", ""]);
+        } else {
+           const jsonResponse = JSON.parse(response.getContentText());
+           if (jsonResponse.status === "success" && jsonResponse.data) {
+             const result = jsonResponse.data;
+             const bibText = (result.full_bibliography && Array.isArray(result.full_bibliography)) 
+                               ? result.full_bibliography.join("\n\n") 
+                               : (result.full_bibliography || "N/A");
+             sheet.appendRow([
+               file.getName(),
+               result.authorYear || "N/A",
+               result.journal || "N/A",
+               result.apa7 || "N/A",
+               result.theory || "N/A",
+               result.methodology || "N/A",
+               result.sampleSize || "N/A",
+               result.keyFindings || "N/A",
+               result.researchGap || "N/A",
+               result.limitations || "N/A",
+               result.originalQuote || "N/A",
+               result.translatedQuote || "N/A",
+               bibText
+             ]);
+           } else {
+             sheet.appendRow([file.getName(), "⚠️ LỖI PHÂN TÍCH JSON TỪ BACKEND", "", "", ""]);
+           }
+        }
+        
+        file.setDescription("PROCESSED_ADVANCED - " + new Date().toISOString());
+        processedCount++;
+
+      } catch (innerError) {
+         sheet.appendRow([file.getName(), "⚠️ LỖI XỬ LÝ", innerError.toString(), "", ""]);
+         file.setDescription("PROCESSED_ADVANCED - Có lỗi - " + new Date().toISOString());
+         processedCount++;
+      }
+    }
+
+    if (files.hasNext()) {
+      ui.alert(`⏳ Đã phân tích nâng cao ${processedCount} file.\nHãy chạy lại Menu để tiếp tục.`);
+    } else if (processedCount > 0) {
+      ui.alert(`🎉 Hoàn thành! Đã phân tích nâng cao ${processedCount} tài liệu mới.`);
+    } else {
+      ui.alert(`✅ Không tìm thấy tài liệu PDF mới nào cần phân tích.`);
+    }
+
+  } catch (e) {
+    ui.alert("❌ Đã xảy ra lỗi hệ thống: " + e.toString());
+  }
+}
+
+// =================================================================
+// 🧠 8. TỔNG HỢP LITERATURE REVIEW (MATRIX SYNTHESIS)
+// =================================================================
+function generateMatrixSynthesis() {
+  const ui = SpreadsheetApp.getUi();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const userProperties = PropertiesService.getUserProperties();
+  
+  const apiKey = userProperties.getProperty('GEMINI_API_KEY');
+  const backendUrl = userProperties.getProperty('BACKEND_URL');
+
+  if (!apiKey || !backendUrl) {
+    ui.alert("⚠️ Bạn chưa cấu hình đủ API Key hoặc Backend URL!");
+    return;
+  }
+
+  // Lấy các dòng đang bôi đen
+  const activeRange = sheet.getActiveRange();
+  let startRow = activeRange.getRow();
+  let numRows = activeRange.getNumRows();
+  
+  if (numRows === 1) {
+    const response = ui.alert("Chưa bôi đen dữ liệu", "Bạn chỉ đang chọn 1 dòng. Bạn có muốn tổng hợp TẤT CẢ các bài báo có trong bảng không?", ui.ButtonSet.YES_NO);
+    if (response === ui.Button.YES) {
+      startRow = 2; // Bỏ qua Header
+      numRows = sheet.getLastRow() - 1;
+    } else {
+      return;
+    }
+  }
+
+  if (numRows <= 0) {
+    ui.alert("⚠️ Không có dữ liệu để tổng hợp.");
+    return;
+  }
+
+  const dataRange = sheet.getRange(startRow, 1, numRows, 13);
+  const values = dataRange.getValues();
+  
+  const documents = [];
+  for (let i = 0; i < values.length; i++) {
+    const row = values[i];
+    if (!row[0]) continue; 
+    
+    documents.push({
+      "Title/Author": row[0] + " - " + row[1],
+      "Theory": row[4],
+      "Methodology": row[5],
+      "Key Findings": row[7],
+      "Research Gap": row[8],
+      "Limitations": row[9]
+    });
+  }
+
+  if (documents.length === 0) {
+    ui.alert("⚠️ Không tìm thấy bài báo nào hợp lệ trong vùng chọn.");
+    return;
+  }
+
+  SpreadsheetApp.getActiveSpreadsheet().toast("Đang gửi " + documents.length + " bài báo cho AI tổng hợp...", "🧠 Matrix Synthesis", -1);
+
+  try {
+    const payload = {
+      api_key: apiKey,
+      documents: documents
+    };
+    
+    const response = UrlFetchApp.fetch(backendUrl + "/api/synthesis", {
+      method: "post",
+      contentType: "application/json",
+      headers: { 'ngrok-skip-browser-warning': '69420' },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+    
+    if (response.getResponseCode() !== 200) {
+      ui.alert("⚠️ Lỗi từ Backend: " + response.getContentText());
+      return;
+    }
+    
+    const jsonResponse = JSON.parse(response.getContentText());
+    if (jsonResponse.status === "success" && jsonResponse.report) {
+      const doc = DocumentApp.create("Matrix Synthesis Report - " + new Date().toLocaleDateString());
+      const body = doc.getBody();
+      body.insertParagraph(0, jsonResponse.report);
+      
+      const docUrl = doc.getUrl();
+      
+      const htmlOutput = HtmlService.createHtmlOutput('<p>✅ Tổng hợp thành công!</p><p>Mở báo cáo tại đây: <a href="' + docUrl + '" target="_blank">Matrix Synthesis Report</a></p>')
+        .setWidth(350)
+        .setHeight(150);
+      ui.showModalDialog(htmlOutput, 'Hoàn thành Literature Review');
+      
+    } else {
+      ui.alert("⚠️ Lỗi phân tích JSON từ Backend");
+    }
+  } catch (e) {
+    ui.alert("❌ Đã xảy ra lỗi hệ thống: " + e.toString());
+  }
+}
+
+// =================================================================
+// 📥 9. XUẤT FILE RIS (CHO ZOTERO/ENDNOTE)
+// =================================================================
+function exportRis() {
+  const ui = SpreadsheetApp.getUi();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  
+  let lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    ui.alert("⚠️ Chưa có dữ liệu để xuất.");
+    return;
+  }
+  
+  const values = sheet.getRange(2, 1, lastRow - 1, 13).getValues();
+  
+  let risContent = "";
+  for (let i = 0; i < values.length; i++) {
+    const row = values[i];
+    if (!row[0]) continue;
+    
+    const fileName = row[0]; 
+    const authorYear = row[1] || "";
+    const journal = row[2] || "";
+    
+    let author = authorYear;
+    let year = "";
+    const yearMatch = authorYear.match(/\((\d{4})\)/);
+    if (yearMatch) {
+      year = yearMatch[1];
+      author = authorYear.replace(yearMatch[0], "").trim();
+    }
+    
+    risContent += "TY  - JOUR\n";
+    risContent += "TI  - " + fileName.replace(".pdf", "") + "\n";
+    risContent += "AU  - " + author + "\n";
+    risContent += "PY  - " + year + "\n";
+    risContent += "JO  - " + journal + "\n";
+    risContent += "ER  - \n\n";
+  }
+  
+  const base64Data = Utilities.base64Encode(Utilities.newBlob(risContent).getBytes());
+  const htmlOutput = HtmlService.createHtmlOutput(`
+    <p>File RIS đã sẵn sàng để tải xuống.</p>
+    <a href="data:application/x-research-info-systems;base64,${base64Data}" download="References.ris" class="btn" style="padding: 10px; background: #4CAF50; color: white; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 10px;">Tải xuống File RIS</a>
+  `)
+  .setWidth(300)
+  .setHeight(150);
+  
+  ui.showModalDialog(htmlOutput, 'Xuất file RIS');
+}
+
+// =================================================================
+// 🕸️ 10. XEM ĐỒ THỊ KIẾN THỨC (KNOWLEDGE GRAPH)
+// =================================================================
+function showKnowledgeGraph() {
+  const userProperties = PropertiesService.getUserProperties();
+  const backendUrl = userProperties.getProperty('BACKEND_URL');
+  const ui = SpreadsheetApp.getUi();
+
+  if (!backendUrl) {
+    ui.alert("⚠️ Bạn chưa cấu hình Backend URL!");
+    return;
+  }
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <base target="_top">
+        <style>
+          body { margin: 0; padding: 0; overflow: hidden; }
+          iframe { width: 100%; height: 100vh; border: none; }
+        </style>
+      </head>
+      <body>
+        <iframe src="${backendUrl}/api/graph"></iframe>
+      </body>
+    </html>
+  `;
+  
+  const htmlOutput = HtmlService.createHtmlOutput(html)
+      .setWidth(1000)
+      .setHeight(700);
+      
+  ui.showModalDialog(htmlOutput, '🕸️ Mạng lưới Trích dẫn (Knowledge Graph)');
 }

@@ -20,6 +20,9 @@
     <div id="chat-history">
       <div class="message bot-msg">Xin chào! Tôi có thể giúp bạn tìm kiếm và trả lời các thông tin dựa trên dữ liệu luận án đã lưu. Bạn muốn hỏi gì?</div>
     </div>
+    <div style="margin-bottom: 10px;">
+      <label style="font-size: 14px;"><input type="checkbox" id="specific-file" /> Chỉ hỏi bài báo đang chọn</label>
+    </div>
     <div id="input-area">
       <input type="text" id="question" placeholder="Nhập câu hỏi..." onkeypress="if(event.key === 'Enter') askQuestion()">
       <button onclick="askQuestion()">Gửi</button>
@@ -43,6 +46,7 @@
       function askQuestion() {
         const input = document.getElementById('question');
         const text = input.value.trim();
+        const useSpecificFile = document.getElementById('specific-file').checked;
         if (!text) return;
         
         appendMessage('user', text);
@@ -65,7 +69,7 @@
             input.disabled = false;
             input.focus();
           })
-          .processChat(text);
+          .processChat(text, useSpecificFile);
       }
     </script>
   </body>

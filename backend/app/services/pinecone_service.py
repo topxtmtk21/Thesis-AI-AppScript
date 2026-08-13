@@ -1,14 +1,15 @@
 from pinecone import Pinecone, ServerlessSpec
-import google.generativeai as genai
+from google import genai
 import time
 import uuid
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 
 class PineconeManager:
     def __init__(self, pinecone_api_key, gemini_api_key, index_name="academic-papers"):
         self.pc = Pinecone(api_key=pinecone_api_key)
         self.index_name = index_name
-        genai.configure(api_key=gemini_api_key)
+        self.client = genai.Client(api_key=gemini_api_key)
         
         # Kiểm tra và tạo index nếu chưa có
         if self.index_name not in self.pc.list_indexes().names():
@@ -25,14 +26,26 @@ class PineconeManager:
                 
         self.index = self.pc.Index(self.index_name)
 
-    def _get_embedding(self, text, task_type="retrieval_document"):
-        # Sử dụng Gemini để nhúng văn bản
-        result = genai.embed_content(
-            model="models/text-embedding-004",
-            content=text,
-            task_type=task_type
+    @retry(
+        wait=wait_exponential(multiplier=2, min=2, max=30),
+        stop=stop_after_attempt(5),
+        retry=retry_if_exception_type(Exception),
+        reraise=True
+    )
+    def _get_embeddings_batch(self, texts, task_type="retrieval_document"):
+        # Sử dụng Gemini để nhúng một batch văn bản (tối đa 100 chunk/request)
+        response = self.client.models.embed_content(
+            model="gemini-embedding-001",
+            contents=texts,
+            config={
+                "task_type": task_type.upper() if task_type else None,
+                "output_dimensionality": 768
+            }
         )
-        return result['embedding']
+        return [emb.values for emb in response.embeddings]
+        
+    def _get_embedding(self, text, task_type="retrieval_document"):
+        return self._get_embeddings_batch([text], task_type)[0]
 
     def add_document(self, doc_data: dict):
         text = doc_data.get("text", "")
@@ -60,42 +73,51 @@ class PineconeManager:
         }
             
         vectors = []
-        for i, chunk in enumerate(text_chunks):
-            vector_id = f"{paper_id}_chunk_{i}"
-            embedding = self._get_embedding(chunk)
+        
+        # Chia text_chunks thành các batch (mỗi batch 50 chunk để vừa Pinecone và Gemini limit)
+        batch_size = 50
+        for i in range(0, len(text_chunks), batch_size):
+            batch_chunks = text_chunks[i:i+batch_size]
             
-            # Lưu cả nội dung text vào metadata để lúc truy vấn có cái đọc
-            meta = {"title": title, "chunk_index": i, "text": chunk}
-            meta.update(metadata_dict)
+            # Lấy vector cho cả batch bằng 1 request duy nhất!
+            embeddings = self._get_embeddings_batch(batch_chunks)
             
-            vectors.append({
-                "id": vector_id,
-                "values": embedding,
-                "metadata": meta
-            })
-            
-            # Gửi lên Pinecone mỗi 50 chunk để tránh quá tải
-            if len(vectors) >= 50:
-                self.index.upsert(vectors=vectors)
-                vectors = []
-                time.sleep(0.5)
+            batch_vectors = []
+            for j, chunk in enumerate(batch_chunks):
+                chunk_index = i + j
+                vector_id = f"{paper_id}_chunk_{chunk_index}"
                 
-        if len(vectors) > 0:
-            self.index.upsert(vectors=vectors)
+                meta = {"title": title, "chunk_index": chunk_index, "text": chunk}
+                meta.update(metadata_dict)
+                
+                batch_vectors.append({
+                    "id": vector_id,
+                    "values": embeddings[j],
+                    "metadata": meta
+                })
+                
+            self.index.upsert(vectors=batch_vectors)
+            time.sleep(1) # Nghỉ một chút giữa các batch để an toàn
+            vectors.extend(batch_vectors)
             
         print(f"Đã lưu vector lên Pinecone cho bài báo: {title} ({len(text_chunks)} chunks)")
         return paper_id
 
-    def search(self, query_text, top_k=5):
+    def search(self, query_text, top_k=5, filename=None):
         # Chuyển câu hỏi thành Vector
         query_vector = self._get_embedding(query_text, task_type="retrieval_query")
         
         # Truy vấn Pinecone
-        response = self.index.query(
-            vector=query_vector,
-            top_k=top_k,
-            include_metadata=True
-        )
+        query_params = {
+            "vector": query_vector,
+            "top_k": top_k,
+            "include_metadata": True
+        }
+        
+        if filename:
+            query_params["filter"] = {"filename": {"$eq": filename}}
+            
+        response = self.index.query(**query_params)
         
         return response
 

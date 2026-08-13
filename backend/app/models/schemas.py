@@ -21,6 +21,7 @@ class ChatRequest(BaseModel):
     question: str
     api_key: str
     pinecone_api_key: str
+    filename: Optional[str] = None
 
 class ExportRisRequest(BaseModel):
     authors: str
@@ -35,3 +36,8 @@ class ExportRisRequest(BaseModel):
 class ExportRequest(BaseModel):
     format: str # 'md', 'docx', 'xlsx'
     documents: List[Dict[str, Any]]
+
+class SynthesisRequest(BaseModel):
+    api_key: str
+    documents: List[Dict[str, str]]
+

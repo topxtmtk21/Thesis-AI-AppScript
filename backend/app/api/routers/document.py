@@ -1,11 +1,11 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from typing import List, Dict, Any
 import tempfile
 import fitz
 import os
 
-from app.models.schemas import ExportRequest, ExportRisRequest, AnalyzeDocumentRequest
+from app.models.schemas import ExportRequest, ExportRisRequest, AnalyzeDocumentRequest, SynthesisRequest
 from app.services.export_service import DocumentExporter
 from app.services.pdf_service import PDFHighlighter
 from app.services.gemini_service import GeminiService
@@ -14,6 +14,16 @@ from app.services.drive_service import DriveManager
 from app.services.graph_service import KnowledgeGraphManager
 
 router = APIRouter()
+
+@router.get("/graph")
+def get_graph():
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+    html_path = os.path.join(base_dir, 'frontend', 'knowledge_graph.html')
+    if os.path.exists(html_path):
+        return FileResponse(html_path)
+    else:
+        return HTMLResponse("<h1>Chưa có dữ liệu Đồ thị Kiến thức</h1><p>Vui lòng chạy Phân tích Nâng cao ít nhất 1 bài báo để hệ thống tự tạo sơ đồ.</p>")
+
 db_instances = {}
 
 def get_db(pinecone_key: str, gemini_key: str):
@@ -47,6 +57,54 @@ def analyze_and_process(req: AnalyzeDocumentRequest):
         kg.save_graph()
         
         return {"status": "success", "data": result_json}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/analyze-pdf-blob")
+async def analyze_pdf_blob(
+    file: UploadFile = File(...),
+    api_key: str = Form(...),
+    pinecone_api_key: str = Form(...)
+):
+    try:
+        gemini = GeminiService(api_key)
+        db = get_db(pinecone_api_key, api_key)
+        kg = KnowledgeGraphManager()
+
+        temp_input = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        content = await file.read()
+        temp_input.write(content)
+        temp_input.close()
+        
+        # Use Native PDF Analysis (Vision) instead of fitz text extraction
+        result_json = gemini.analyze_pdf_native(temp_input.name)
+        
+        db.add_document({
+            "filename": file.filename,
+            "text": "Native PDF Analysis (No raw text stored)",
+            "authors": result_json.get("authors", ""),
+            "year": result_json.get("year", ""),
+            "theory": result_json.get("theory", ""),
+            "methodology": result_json.get("methodology", "")
+        })
+        
+        authors_year = f'{result_json.get("authors", "")} ({result_json.get("year", "")})'
+        kg.add_node(authors_year, title=result_json.get("title", ""), group=1)
+        for ref in result_json.get("references", []):
+            kg.add_node(ref, group=2)
+            kg.add_relation(authors_year, ref, "cites")
+        kg.save_graph()
+        
+        return {"status": "success", "data": result_json}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/synthesis")
+def synthesize_literature(req: SynthesisRequest):
+    try:
+        gemini = GeminiService(req.api_key)
+        report = gemini.synthesize_literature(req.documents)
+        return {"status": "success", "report": report}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
