@@ -35,6 +35,7 @@ function onOpen() {
     .addItem('🔗 3. Cập nhật Link Backend (Ngrok)', 'configureBackendUrl')
     .addItem('⚡ 4. Chạy Phân tích Tài liệu', 'processNewDocuments')
     .addItem('⚡ 4b. Phân tích Nâng cao (Có trang & Tham khảo)', 'processDocumentsAdvanced')
+    .addItem('📝 4c. Dán văn bản từ NotebookLM', 'openNotebookLMDialog')
     .addItem('📋 5. Xem Cấu hình Hiện tại', 'showCurrentSettings')
     .addSeparator()
     .addItem('🔍 6. Kiểm tra lỗi API (Chẩn đoán)', 'runDiagnostics')
@@ -789,4 +790,111 @@ function showKnowledgeGraph() {
       .setHeight(700);
       
   ui.showModalDialog(htmlOutput, '🕸️ Mạng lưới Trích dẫn (Knowledge Graph)');
+}
+
+// =================================================================
+// 📝 12. TÍCH HỢP NOTEBOOKLM
+// =================================================================
+function openNotebookLMDialog() {
+  var html = HtmlService.createHtmlOutputFromFile('notebooklm_dialog')
+      .setWidth(600)
+      .setHeight(450);
+  SpreadsheetApp.getUi()
+      .showModalDialog(html, ' ');
+}
+
+function processNotebookLMText(text) {
+  const ui = SpreadsheetApp.getUi();
+  const userProperties = PropertiesService.getUserProperties();
+  
+  const apiKey = userProperties.getProperty('GEMINI_API_KEY');
+  const backendUrl = userProperties.getProperty('BACKEND_URL');
+  const pineconeKey = userProperties.getProperty('PINECONE_API_KEY');
+
+  if (!apiKey || !pineconeKey || !backendUrl) {
+    throw new Error("Bạn chưa cấu hình đủ API Key (Gemini, Pinecone) hoặc Backend URL!");
+  }
+
+  const sheetApp = SpreadsheetApp.getActiveSpreadsheet();
+  sheetApp.toast(`Đang gửi đoạn văn bản sang Backend để xử lý...`, 'Đang xử lý', -1);
+  
+  const payload = {
+    text: text,
+    api_key: apiKey,
+    pinecone_api_key: pineconeKey
+  };
+  
+  const options = {
+    method: 'post',
+    payload: payload,
+    muteHttpExceptions: true
+  };
+  
+  try {
+    const backendUrlParsed = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
+    const response = UrlFetchApp.fetch(`${backendUrlParsed}/api/analyze-raw-text`, options);
+    const responseCode = response.getResponseCode();
+    const responseBody = response.getContentText();
+    
+    if (responseCode === 200) {
+      const data = JSON.parse(responseBody);
+      if (data.status === "success" && data.data) {
+        const result = data.data;
+        const sheet = sheetApp.getActiveSheet();
+        
+        let detailedFindingsStr = "";
+        if (result.detailedFindings && Array.isArray(result.detailedFindings)) {
+          detailedFindingsStr = result.detailedFindings.map(item => 
+            `[${item.location || 'N/A'}] ${item.content || ''}`
+          ).join('\n\n');
+        } else if (result.detailedFindings) {
+          detailedFindingsStr = String(result.detailedFindings);
+        }
+
+        let keyFindingsStr = result.keyFindings || "";
+        if (Array.isArray(keyFindingsStr)) {
+          keyFindingsStr = keyFindingsStr.join('\n');
+        }
+
+        const newRow = [
+          "Dán từ NotebookLM",
+          "Thủ công",
+          "", // PDF Link
+          result.authors || "",
+          result.year || "",
+          result.title || "",
+          result.journal || "",
+          result.apa7 || "",
+          result.theory || "",
+          result.methodology || "",
+          result.sampleSize || "",
+          keyFindingsStr,
+          result.researchGap || "",
+          result.limitations || "",
+          detailedFindingsStr,
+          result.originalQuote || "",
+          result.translatedQuote || ""
+        ];
+        
+        sheet.appendRow(newRow);
+        
+        sheetApp.toast(`Đã chèn dữ liệu thành công!`, 'Thành công', 5);
+        return {status: 'success'};
+      } else {
+        throw new Error(data.message || 'Lỗi không xác định từ Backend');
+      }
+    } else {
+      let errorMsg = `HTTP Error ${responseCode}`;
+      try {
+        const errObj = JSON.parse(responseBody);
+        errorMsg = errObj.detail || errObj.message || errorMsg;
+      } catch (e) {
+        errorMsg += `\n${responseBody}`;
+      }
+      throw new Error(errorMsg);
+    }
+  } catch (e) {
+    sheetApp.toast(e.toString(), 'Lỗi Backend', 10);
+    throw e;
+  }
 }

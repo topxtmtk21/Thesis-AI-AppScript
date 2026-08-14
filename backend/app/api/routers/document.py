@@ -114,6 +114,41 @@ def synthesize_literature(req: SynthesisRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/analyze-raw-text")
+async def analyze_raw_text(
+    text: str = Form(...),
+    api_key: str = Form(...),
+    pinecone_api_key: str = Form(...)
+):
+    try:
+        gemini = GeminiService(api_key)
+        db = get_db(pinecone_api_key, api_key)
+        kg = KnowledgeGraphManager()
+        
+        result_json = gemini.format_raw_text(text)
+        
+        db.add_document({
+            "filename": "NotebookLM_Extract",
+            "text": text,
+            "authors": result_json.get("authors", ""),
+            "year": result_json.get("year", ""),
+            "theory": result_json.get("theory", ""),
+            "methodology": result_json.get("methodology", "")
+        })
+        
+        authors_year = f'{result_json.get("authors", "")} ({result_json.get("year", "")})'
+        kg.add_node(authors_year, title=result_json.get("title", ""), group=1)
+        for ref in result_json.get("references", []):
+            kg.add_node(ref, group=2)
+            kg.add_relation(authors_year, ref, "cites")
+        kg.save_graph()
+        
+        return {"status": "success", "data": result_json}
+    except Exception as e:
+        logger.error(f"Error in analyze_raw_text: {e}")
+        friendly_error = handle_api_error(e, "analyze_raw_text")
+        raise HTTPException(status_code=500, detail=friendly_error)
+
 @router.get("/documents")
 def get_documents(api_key: str, pinecone_api_key: str):
     try:

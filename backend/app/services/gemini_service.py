@@ -149,3 +149,55 @@ LƯU Ý: Mục "highlight_quotes" bắt buộc COPY Y HỆT từ văn bản và 
             return data[0]
         return data
 
+    @retry(
+        wait=wait_exponential(multiplier=5, min=15, max=60),
+        stop=stop_after_attempt(5),
+        retry=retry_if_exception_type(Exception),
+        reraise=True
+    )
+    def format_raw_text(self, text: str) -> dict:
+        prompt = """Bạn là một chuyên gia nghiên cứu học thuật xuất sắc. Nhiệm vụ của bạn là đọc ĐOẠN TÓM TẮT/TRÍCH XUẤT (đã được tạo ra từ NotebookLM) dưới đây và định dạng nó thành cấu trúc JSON chuẩn.
+
+VĂN BẢN TRÍCH XUẤT TỪ NOTEBOOKLM:
+---------------------
+{text}
+---------------------
+
+Hãy điền thông tin vào định dạng JSON dưới đây. Nếu thông tin nào không có trong văn bản, hãy để trống "" hoặc [] nhưng KHÔNG được tự bịa ra.
+{
+  "authors": "Tác giả",
+  "year": "Năm xuất bản",
+  "authorYear": "Tên tác giả và năm xuất bản (VD: Smith et al., 2023)",
+  "title": "Tựa đề bài báo",
+  "journal": "Tên tạp chí",
+  "apa7": "Trích dẫn chuẩn APA 7th",
+  "theory": "Tóm tắt Khung lý thuyết (Tiếng Việt)",
+  "methodology": "Phương pháp nghiên cứu (Tiếng Việt)",
+  "sampleSize": "Quy mô mẫu (Tiếng Việt)",
+  "keyFindings": "Các kết quả chính (Bao gồm số liệu thống kê quan trọng) (Tiếng Việt)",
+  "researchGap": "Khoảng trống nghiên cứu (Tiếng Việt)",
+  "limitations": "Hạn chế nghiên cứu (Tiếng Việt)",
+  "detailedFindings": [
+    {
+      "content": "Nội dung/Phát hiện cốt lõi số 1 (chi tiết, đầy đủ số liệu)",
+      "location": "Trang X / Phần Y"
+    },
+    {
+      "content": "Nội dung/Phát hiện cốt lõi số 2...",
+      "location": "Trang Z / Phần W"
+    }
+  ],
+  "originalQuote": "Một câu trích dẫn nguyên văn xuất sắc nhất (Tiếng Anh)",
+  "translatedQuote": "Bản dịch tiếng Việt của câu trích dẫn trên",
+  "full_bibliography": ["Trích dẫn 1 chi tiết...", "Trích dẫn 2 chi tiết..."],
+  "references": ["Bài báo trích dẫn 1", "Bài báo trích dẫn 2"]
+}"""
+        response = self.client.models.generate_content(
+            model=self.model_name,
+            contents=prompt.format(text=text),
+            config=types.GenerateContentConfig(response_mime_type="application/json")
+        )
+        data = json.loads(response.text)
+        if isinstance(data, list) and len(data) > 0:
+            return data[0]
+        return data

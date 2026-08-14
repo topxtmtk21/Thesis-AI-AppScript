@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+  <style>
+    body { padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f9f9f9; }
+    h5 { color: #1a73e8; font-weight: 600; margin-bottom: 20px; font-size: 1.2rem; }
+    textarea { width: 100%; height: 250px; padding: 12px; border: 1px solid #ccc; border-radius: 8px; resize: none; font-size: 14px; margin-bottom: 15px; }
+    textarea:focus { border-color: #1a73e8; outline: none; box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2); }
+    .btn { background-color: #1a73e8; border-radius: 20px; text-transform: none; font-weight: bold; width: 100%; }
+    .btn:hover { background-color: #1557b0; }
+    .helper-text { font-size: 0.9rem; color: #5f6368; margin-bottom: 10px; }
+    .loader { display: none; margin-top: 15px; text-align: center; }
+  </style>
+</head>
+<body>
+
+  <h5>Dán kết quả từ NotebookLM</h5>
+  <div class="helper-text">Hãy copy toàn bộ văn bản tóm tắt/trích xuất từ NotebookLM và dán vào ô bên dưới. Hệ thống sẽ dùng AI để tự động xếp vào các cột.</div>
+  
+  <textarea id="rawText" placeholder="Dán văn bản vào đây..."></textarea>
+  
+  <button id="processBtn" class="btn waves-effect waves-light" onclick="submitText()">
+    Bắt đầu định dạng
+  </button>
+  
+  <div class="loader" id="loader">
+    <div class="preloader-wrapper small active">
+      <div class="spinner-layer spinner-blue-only">
+        <div class="circle-clipper left">
+          <div class="circle"></div>
+        </div><div class="gap-patch">
+          <div class="circle"></div>
+        </div><div class="circle-clipper right">
+          <div class="circle"></div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top: 10px; color: #1a73e8; font-weight: 500;">Đang xử lý, vui lòng chờ...</div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+  <script>
+    function submitText() {
+      var text = document.getElementById('rawText').value.trim();
+      if (!text) {
+        M.toast({html: 'Vui lòng dán văn bản trước!', classes: 'red rounded'});
+        return;
+      }
+      
+      document.getElementById('processBtn').style.display = 'none';
+      document.getElementById('loader').style.display = 'block';
+      
+      google.script.run
+        .withSuccessHandler(function(response) {
+          google.script.host.close();
+        })
+        .withFailureHandler(function(error) {
+          M.toast({html: 'Lỗi: ' + error.message, classes: 'red rounded'});
+          document.getElementById('processBtn').style.display = 'block';
+          document.getElementById('loader').style.display = 'none';
+        })
+        .processNotebookLMText(text);
+    }
+  </script>
+</body>
+</html>
