@@ -404,17 +404,11 @@ async function uploadFile(file) {
         });
         
         if (response.ok) {
-            statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #10b981;"></i> Xử lý thành công! File PDF đã được tô màu highlight và lưu trữ.`;
+            const data = await response.json();
+            statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #10b981;"></i> Xử lý thành công! File PDF đang được tô màu và lưu ngầm trên Server.`;
             
-            // Tải file PDF đã được highlight về
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = file.name.replace(".pdf", "_highlighted.pdf");
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
+            // Reload list of docs
+            loadDocuments();
         } else {
             const data = await response.json();
             statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi: ${data.detail || "Không thể xử lý"}`;
