@@ -18,8 +18,8 @@ COPY . /app/
 # Set working directory to backend so uvicorn finds app.main
 WORKDIR /app/backend
 
-# Expose port
+# Expose default port (Railway overrides this dynamically)
 EXPOSE 8080
 
-# Command to run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Command to run the application (Uses PORT env var if set, otherwise 8080)
+CMD sh -c "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"
