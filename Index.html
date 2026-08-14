@@ -5,6 +5,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Academic AI Dashboard</title>
 
+    <!-- Hiện lỗi JS trực tiếp lên trang (dải đỏ trên cùng) thay vì chỉ log vào Console -
+         để chẩn đoán được sự cố ngay cả khi người dùng không mở được DevTools. Đặt đầu
+         tiên, trước cả app.js, để bắt được lỗi từ mọi script chạy sau nó. -->
+    <script>
+        (function () {
+            function showBanner(text) {
+                try {
+                    var banner = document.createElement('div');
+                    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999999;' +
+                        'background:#dc2626;color:#fff;padding:14px 20px;font:13px/1.5 monospace;' +
+                        'white-space:pre-wrap;word-break:break-word;';
+                    banner.textContent = text;
+                    var attach = function () { document.body && document.body.prepend(banner); };
+                    if (document.body) attach();
+                    else document.addEventListener('DOMContentLoaded', attach);
+                } catch (bannerErr) { /* không để lỗi của chính banner làm hỏng thêm gì nữa */ }
+            }
+            // Lỗi JS thông thường (bao gồm lỗi khi app.js chạy)
+            window.addEventListener('error', function (e) {
+                showBanner('⚠️ Lỗi JavaScript: ' + e.message +
+                    ' (dòng ' + e.lineno + ':' + e.colno + ', file: ' + (e.filename || 'inline') + ')');
+            });
+            // Promise bị reject nhưng không ai .catch()
+            window.addEventListener('unhandledrejection', function (e) {
+                showBanner('⚠️ Promise lỗi: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+            });
+            // Trình duyệt chặn theo Content-Security-Policy (vd chặn onclick inline) - đây
+            // không phải "error" JS thông thường nên cần bắt riêng.
+            document.addEventListener('securitypolicyviolation', function (e) {
+                showBanner('⚠️ Bị chặn bởi Content-Security-Policy: ' + e.violatedDirective +
+                    ' (nguồn bị chặn: ' + e.blockedURI + ')');
+            });
+        })();
+    </script>
+
     <!-- app.js chạy TRƯỚC mọi CDN bên ngoài (Tailwind/Fonts/FontAwesome) và không phụ
          thuộc gì vào chúng - script trong HTML chạy tuần tự theo thứ tự văn bản, nên nếu
          đặt sau 1 script CDN mà CDN đó bị treo/chặn (từng xảy ra khi mở qua Apps Script
