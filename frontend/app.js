@@ -7,9 +7,11 @@ function switchTab(tabId) {
     // Update title
     const titles = {
         'documents': 'Tài liệu đã lưu',
-        'graph': 'Đồ thị Tri thức'
+        'graph': 'Đồ thị Tri thức',
+        'upload': 'Tải lên PDF',
+        'notebooklm': 'Nhập từ NotebookLM'
     };
-    document.getElementById('page-title').innerText = titles[tabId];
+    document.getElementById('page-title').innerText = titles[tabId] || 'Dashboard';
 
     // Show selected view
     document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
@@ -52,25 +54,37 @@ async function loadDocuments() {
         const data = await response.json();
 
         if (data.status === 'success' && data.documents.length > 0) {
-            window.loadedDocs = data.documents;
-            data.documents.forEach((doc, index) => {
+            tbody.innerHTML = '';
+            data.documents.forEach(doc => {
                 const tr = document.createElement('tr');
+                tr.className = "hover:bg-white/5 transition-colors group";
                 tr.innerHTML = `
-                    <td><input type="checkbox" class="doc-checkbox" value='${JSON.stringify(doc).replace(/'/g, "&apos;")}'></td>
-                    <td><i class="fa-solid fa-file-pdf" style="color:#e74c3c;"></i> ${doc.title || doc.filename || 'Unknown'}</td>
-                    <td>${doc.authors || doc.author || 'Unknown'}</td>
-                    <td>${doc.theory || 'Unknown'}</td>
-                    <td>${doc.methodology || 'Unknown'}</td>
-                    <td><button class="send-btn" style="padding: 5px 10px;" onclick="viewDoc(${index})">Xem chi tiết</button></td>
+                    <td class="px-6 py-4 border-b border-white/10 text-center">
+                        <input type="checkbox" class="doc-checkbox w-4 h-4 rounded border-slate-600 bg-dark-700 accent-brand-500 cursor-pointer" value='${JSON.stringify(doc).replace(/'/g, "&apos;")}'>
+                    </td>
+                    <td class="px-6 py-4 border-b border-white/10">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+                                <i class="fa-solid fa-file-pdf text-red-400"></i>
+                            </div>
+                            <span class="font-medium text-slate-200 truncate max-w-[200px] block" title="${doc.filename || 'Unknown'}">${doc.filename || 'Unknown'}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 border-b border-white/10 text-slate-300">${doc.authors || doc.author || 'Unknown'}</td>
+                    <td class="px-6 py-4 border-b border-white/10 text-slate-300 truncate max-w-xs" title="${doc.title || 'Unknown'}">${doc.title || 'Unknown'}</td>
+                    <td class="px-6 py-4 border-b border-white/10 text-slate-300 truncate max-w-[150px]" title="${doc.methodology || 'Unknown'}">${doc.methodology || 'Unknown'}</td>
+                    <td class="px-6 py-4 border-b border-white/10 text-center">
+                        <button class="px-4 py-1.5 rounded-lg bg-brand-500/20 text-brand-400 hover:bg-brand-500 hover:text-white text-sm font-medium transition-all opacity-70 group-hover:opacity-100 border border-brand-500/30" onclick="viewDoc('${doc.id}')">Xem</button>
+                    </td>
                 `;
                 tbody.appendChild(tr);
             });
         } else {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--text-muted);">Chưa có tài liệu nào trong cơ sở dữ liệu.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-12 text-center text-slate-400">Chưa có tài liệu nào trong cơ sở dữ liệu.</td></tr>';
         }
     } catch (error) {
         console.error('Error fetching docs:', error);
-        document.getElementById('docs-body').innerHTML = '<tr><td colspan="5" style="text-align:center; color: #f87171;">Lỗi kết nối Backend.</td></tr>';
+        document.getElementById('docs-body').innerHTML = '<tr><td colspan="6" class="px-6 py-12 text-center text-red-400"><i class="fa-solid fa-triangle-exclamation mr-2"></i> Lỗi kết nối Backend.</td></tr>';
     }
 }
 
@@ -173,50 +187,6 @@ function openSettings() {
 
 function closeSettings() {
     document.getElementById('settings-modal').classList.remove('active');
-}
-
-function viewDoc(index) {
-    const doc = window.loadedDocs[index];
-    if (!doc) return;
-    
-    document.getElementById('doc-modal-title').innerText = doc.title || doc.filename || 'Chi tiết Tài liệu';
-    
-    let findingsHtml = '<p style="color:var(--text-muted);">Không có phát hiện chi tiết nào.</p>';
-    if (doc.detailedFindings && doc.detailedFindings.length > 0) {
-        findingsHtml = '<ul style="padding-left: 20px; line-height: 1.6;">';
-        doc.detailedFindings.forEach(f => {
-            findingsHtml += `<li style="margin-bottom: 10px;">
-                <strong>[${f.location || 'Không rõ vị trí'}]</strong> ${f.content || ''}
-            </li>`;
-        });
-        findingsHtml += '</ul>';
-    } else if (doc.keyFindings) {
-        findingsHtml = `<p>${doc.keyFindings}</p>`;
-    }
-    
-    const content = `
-        <div style="margin-bottom: 15px;">
-            <strong>Tác giả & Năm:</strong> ${doc.authors || doc.author || 'Unknown'} (${doc.year || 'Unknown'})
-        </div>
-        <div style="margin-bottom: 15px;">
-            <strong>Lý thuyết:</strong> ${doc.theory || 'Unknown'}
-        </div>
-        <div style="margin-bottom: 15px;">
-            <strong>Phương pháp:</strong> ${doc.methodology || 'Unknown'}
-        </div>
-        <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
-        <div style="margin-bottom: 15px;">
-            <h4 style="color: var(--accent); margin-bottom: 10px;"><i class="fa-solid fa-list-check"></i> Các Nội Dung Cốt Lõi:</h4>
-            ${findingsHtml}
-        </div>
-    `;
-    
-    document.getElementById('doc-modal-content').innerHTML = content;
-    document.getElementById('doc-modal').classList.add('active');
-}
-
-function closeDocModal() {
-    document.getElementById('doc-modal').classList.remove('active');
 }
 
 function saveSettings() {
@@ -404,17 +374,172 @@ async function uploadFile(file) {
         });
         
         if (response.ok) {
-            const data = await response.json();
-            statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #10b981;"></i> Xử lý thành công! File PDF đang được tô màu và lưu ngầm trên Server.`;
+            statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #10b981;"></i> Xử lý thành công! File PDF đã được tô màu highlight và lưu trữ.`;
             
-            // Reload list of docs
-            loadDocuments();
+            // Tải file PDF đã được highlight về
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = file.name.replace(".pdf", "_highlighted.pdf");
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
         } else {
             const data = await response.json();
             statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi: ${data.detail || "Không thể xử lý"}`;
         }
     } catch (e) {
         statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi kết nối: ${e.message}`;
+    }
+}
+
+async function processNotebookLMWeb() {
+    const text = document.getElementById('notebooklm-input').value.trim();
+    const geminiKey = document.getElementById('global-gemini-key').value.trim();
+    const statusDiv = document.getElementById('notebooklm-status');
+
+    if (!text) {
+        showToast("Vui lòng dán văn bản từ NotebookLM", "warning");
+        return;
+    }
+    if (!geminiKey) {
+        showToast("Vui lòng nhập Gemini API Key trong phần Cài đặt ở góc phải trên cùng", "error");
+        return;
+    }
+    
+    statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang gọi trực tiếp Google Gemini từ trình duyệt (Siêu tốc)...`;
+    
+    const prompt = `Bạn là một trợ lý nghiên cứu học thuật chuyên nghiệp. Hãy đọc kỹ tài liệu này và trích xuất thông tin theo đúng cấu trúc dưới đây bằng Tiếng Việt (trừ những chỗ có yêu cầu dùng Tiếng Anh). 
+
+YÊU CẦU BẮT BUỘC (QUAN TRỌNG NHẤT): 
+Đối với mọi thông tin bạn trích xuất, bạn PHẢI đính kèm vị trí chính xác của thông tin đó trong ngoặc đơn ở cuối mỗi câu hoặc mỗi đoạn.
+- Nếu tài liệu có số trang: Ghi rõ số trang (VD: tr. 15, tr. 20-22). TUYỆT ĐỐI dùng chữ "tr." thay cho chữ "p.".
+- Nếu tài liệu không có số trang (HTML/Web): Ghi rõ tên Mục/Tiêu đề phần (VD: Mục Methodology, Đoạn 3 phần Discussion).
+Tuyệt đối không tự bịa thông tin, nếu tài liệu không có hãy ghi "Không đề cập".
+
+VĂN BẢN TRÍCH XUẤT TỪ NOTEBOOKLM:
+---------------------
+${text}
+---------------------
+
+Hãy điền thông tin vào định dạng JSON dưới đây. Nếu thông tin nào không có trong văn bản, hãy để trống "" hoặc [] nhưng KHÔNG được tự bịa ra.
+{
+  "authors": "Tác giả",
+  "year": "Năm xuất bản",
+  "authorYear": "Tên tác giả và năm xuất bản (VD: Smith et al., 2023)",
+  "title": "Tựa đề bài báo (Giữ nguyên Tiếng Anh)",
+  "journal": "Tên tạp chí/Hội nghị",
+  "apa7": "Trích dẫn chuẩn xác theo APA 7",
+  "theory": "Tóm tắt ngắn gọn lý thuyết nền tảng. BẮT BUỘC ghi rõ trang/phần",
+  "methodology": "Định lượng, định tính, hay hỗn hợp? Các công cụ phân tích là gì? BẮT BUỘC ghi rõ trang/phần",
+  "sampleSize": "Mô tả chi tiết số lượng, đối tượng, cách thức lấy mẫu. BẮT BUỘC ghi rõ trang/phần",
+  "keyFindings": "Liệt kê các kết quả quan trọng nhất, kèm số liệu thống kê nếu có. Mỗi kết quả BẮT BUỘC ghi rõ trang/phần",
+  "researchGap": "Bài báo này lấp đầy khoảng trống nào của các nghiên cứu đi trước? BẮT BUỘC ghi rõ trang/phần",
+  "limitations": "Tác giả tự nhận định những hạn chế nào? BẮT BUỘC ghi rõ trang/phần",
+  "detailedFindings": [
+    {
+      "content": "Nội dung phát hiện chuyên sâu... (Copy NGUYÊN VĂN từ văn bản nếu có)",
+      "location": "Trang X / Phần Y"
+    },
+    {
+      "content": "Nội dung phát hiện chuyên sâu số 2...",
+      "location": "Trang Z / Phần W"
+    }
+  ],
+  "originalQuote": "Copy NGUYÊN VĂN Tiếng Anh một câu/đoạn xuất sắc nhất. Ghi chính xác số trang/phần",
+  "translatedQuote": "Bản dịch câu trên sang Tiếng Việt mang văn phong học thuật",
+  "full_bibliography": ["Trích dẫn 1 chi tiết...", "Trích dẫn 2 chi tiết..."],
+  "references": ["Liệt kê 3-5 bài báo tham khảo quan trọng nhất mà bài báo này đã trích dẫn ở phần References"]
+}`;
+
+    const payload = {
+        contents: [{
+            parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+            responseMimeType: "application/json"
+        }
+    };
+
+    try {
+        let response;
+        let data;
+        let retries = 6;
+        let backoff = 3000;
+        
+        while (retries > 0) {
+            response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            data = await response.json();
+
+            if (response.ok) {
+                break; // Success
+            } else if (response.status === 503 || response.status === 429) {
+                retries--;
+                if (retries === 0) throw new Error(data.error?.message || "Lỗi không xác định từ Gemini API.");
+                
+                statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Server Gemini quá tải (503). Đang tự động thử lại lần thứ ${7-retries}...`;
+                await new Promise(r => setTimeout(r, backoff));
+                backoff *= 2;
+            } else {
+                throw new Error(data.error?.message || "Lỗi không xác định từ Gemini API.");
+            }
+        }
+
+        if (!data.candidates || data.candidates.length === 0) {
+            throw new Error("Không có dữ liệu trả về từ Gemini. Có thể do chính sách an toàn (Safety Settings).");
+        }
+
+        const rawContent = data.candidates[0].content?.parts?.[0]?.text;
+        if (!rawContent) {
+            throw new Error("Dữ liệu trả về bị rỗng.");
+        }
+
+        let result;
+        try {
+            result = JSON.parse(rawContent);
+        } catch(e) {
+            const cleaned = rawContent.replace(/```json/g, "").replace(/```/g, "").trim();
+            try {
+                result = JSON.parse(cleaned);
+            } catch (e2) {
+                throw new Error(`Không thể parse JSON từ phản hồi: ${cleaned.substring(0, 100)}...`);
+            }
+        }
+
+        if (Array.isArray(result) && result.length > 0) {
+            result = result[0];
+        }
+
+        statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang ghi dữ liệu vào Sheet...`;
+        
+        if (typeof google === 'undefined' || !google.script || !google.script.run) {
+            statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b;"></i> Cảnh báo: google.script.run không khả dụng (bạn đang chạy file HTML trực tiếp thay vì trên Apps Script). Không thể lưu.`;
+            return;
+        }
+
+        google.script.run
+            .withSuccessHandler(function(res) {
+                statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #10b981;"></i> Trích xuất và lưu thành công! Bảng tính đã được cập nhật.`;
+                document.getElementById('notebooklm-input').value = ""; // Clear input
+                showToast("Đã lưu thành công vào Sheet!", "success");
+            })
+            .withFailureHandler(function(error) {
+                statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi ghi vào Sheet: ${error.message}`;
+                showToast("Lỗi xử lý. Vui lòng xem thông báo bên dưới nút bấm.", "error");
+            })
+            .appendNotebookLMRow(result);
+
+    } catch (error) {
+        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi: ${error.message}`;
+        showToast("Lỗi xử lý. Vui lòng xem thông báo bên dưới nút bấm.", "error");
     }
 }
 
