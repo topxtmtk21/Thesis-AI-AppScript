@@ -31,4 +31,4 @@ def handle_api_error(e: Exception, context: str) -> str:
     if "403" in error_str or "API_KEY_INVALID" in error_str or "invalid" in error_str.lower():
         return "Lỗi API: API Key của bạn bị sai, không hợp lệ hoặc chưa được cấp quyền."
         
-    return f"Lỗi hệ thống ({context}): Lỗi không xác định. Tham khảo chi tiết trong Logs của Render."
+    return f"Lỗi hệ thống ({context}): {error_str}. Tham khảo chi tiết trong Logs của Render."
