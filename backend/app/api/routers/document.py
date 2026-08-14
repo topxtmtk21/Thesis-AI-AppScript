@@ -12,6 +12,9 @@ from app.services.gemini_service import GeminiService
 from app.services.pinecone_service import PineconeManager
 from app.services.drive_service import DriveManager
 from app.services.graph_service import KnowledgeGraphManager
+from app.utils.logger import get_logger, handle_api_error
+
+logger = get_logger("document_router")
 
 router = APIRouter()
 
@@ -109,11 +112,13 @@ async def analyze_pdf_blob(
             
             drive.upload_file_to_processed(temp_output.name, file.filename.replace(".pdf", "_highlighted.pdf"))
         except Exception as e:
-            print(f"Warning: Failed to highlight or upload to Drive: {e}")
+            logger.warning(f"Failed to highlight or upload to Drive: {e}")
             
         return {"status": "success", "data": result_json}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error in analyze_pdf_blob: {e}")
+        friendly_error = handle_api_error(e, "analyze_pdf_blob")
+        raise HTTPException(status_code=500, detail=friendly_error)
 
 @router.post("/synthesis")
 def synthesize_literature(req: SynthesisRequest):
@@ -233,4 +238,6 @@ async def upload_pdf(
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error in upload_pdf: {e}")
+        friendly_error = handle_api_error(e, "upload_pdf")
+        raise HTTPException(status_code=500, detail=friendly_error)

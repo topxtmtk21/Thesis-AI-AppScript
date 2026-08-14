@@ -58,8 +58,8 @@ class PineconeManager:
         
         # Cắt nhỏ văn bản (Semantic Chunking)
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
+            chunk_size=8000,
+            chunk_overlap=1000,
             length_function=len,
             is_separator_regex=False,
         )
