@@ -247,6 +247,18 @@
                             </tbody>
                         </table>
                     </div>
+
+                    <div id="docs-pagination" class="px-6 py-3 border-t border-white/10 bg-dark-800/40 flex items-center justify-between text-sm text-slate-400 hidden">
+                        <span id="docs-pagination-info"></span>
+                        <div class="flex items-center gap-2">
+                            <button id="docs-prev-page" onclick="changeDocPage(-1)" class="px-3 py-1.5 rounded-lg bg-dark-700/80 hover:bg-dark-600 text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+                                <i class="fa-solid fa-chevron-left"></i>
+                            </button>
+                            <button id="docs-next-page" onclick="changeDocPage(1)" class="px-3 py-1.5 rounded-lg bg-dark-700/80 hover:bg-dark-600 text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+                                <i class="fa-solid fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </section>
 

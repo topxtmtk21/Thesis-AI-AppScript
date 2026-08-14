@@ -99,6 +99,16 @@ LƯU Ý: "detailedFindings" liệt kê tối đa 8 phát hiện quan trọng nh�
         )
         return response.text
 
+    def answer_question(self, prompt: str) -> str:
+        # Trả lời hỏi-đáp có ngữ cảnh (RAG) - tác vụ cần phản hồi nhanh (chat), không cần
+        # suy luận nhiều bước, nên cũng hạ xuống "low" giống các tác vụ trích xuất khác.
+        response = self.client.models.generate_content(
+            model=self.model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(thinking_config=_FAST_THINKING)
+        )
+        return response.text
+
     @retry(
         wait=wait_exponential(multiplier=5, min=15, max=60),
         stop=stop_after_attempt(5),

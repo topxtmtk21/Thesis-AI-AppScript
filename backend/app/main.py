@@ -1,7 +1,12 @@
+from typing import Optional
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from google import genai
+from google.genai import types
+from pinecone import Pinecone
 from app.api.routers import document, chat, jobs
 import os
 
@@ -49,8 +54,39 @@ app.include_router(chat.router, prefix="/api", tags=["Chat"])
 app.include_router(jobs.router, prefix="/api", tags=["Jobs"])
 
 @app.get("/health")
-def health_check():
-    return {"status": "ok", "message": "Backend is running with modern structure!"}
+def health_check(api_key: Optional[str] = None, pinecone_api_key: Optional[str] = None):
+    # Không có key nào server tự giữ sẵn (mọi Gemini/Pinecone key đều do client cung cấp
+    # theo từng request), nên mặc định chỉ xác nhận tiến trình còn sống. Truyền kèm
+    # api_key/pinecone_api_key (query param) nếu muốn kiểm tra thật kết nối tới 2 dịch vụ
+    # đó - hữu ích khi gắn vào công cụ giám sát uptime.
+    checks = {"server": "ok"}
+    healthy = True
+
+    if api_key:
+        try:
+            client = genai.Client(api_key=api_key)
+            client.models.generate_content(
+                model="gemini-3.7-flash",
+                contents="ping",
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_level="low"),
+                    max_output_tokens=5
+                )
+            )
+            checks["gemini"] = "ok"
+        except Exception as e:
+            checks["gemini"] = f"error: {e}"
+            healthy = False
+
+    if pinecone_api_key:
+        try:
+            Pinecone(api_key=pinecone_api_key).list_indexes()
+            checks["pinecone"] = "ok"
+        except Exception as e:
+            checks["pinecone"] = f"error: {e}"
+            healthy = False
+
+    return {"status": "ok" if healthy else "degraded", "checks": checks}
 
 # Mount Frontend
 frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend")

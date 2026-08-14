@@ -64,19 +64,39 @@ async function loadDocuments() {
     }
 }
 
-function renderDocumentsTable(docs) {
-    const tbody = document.getElementById('docs-body');
+// Phân trang phía client - bảng không phân trang sẽ render hết vào 1 lần, chậm dần khi
+// kho tài liệu lên tới hàng trăm dòng.
+const DOCS_PAGE_SIZE = 20;
+let currentDocsView = [];
+let currentDocsPage = 1;
 
-    if (!docs || docs.length === 0) {
+function renderDocumentsTable(docs) {
+    currentDocsView = docs || [];
+    currentDocsPage = 1;
+    renderCurrentDocsPage();
+}
+
+function renderCurrentDocsPage() {
+    const tbody = document.getElementById('docs-body');
+    const paginationBar = document.getElementById('docs-pagination');
+    const totalItems = currentDocsView.length;
+
+    if (totalItems === 0) {
         const message = allLoadedDocuments.length === 0
             ? 'Chưa có tài liệu nào trong cơ sở dữ liệu.'
             : 'Không tìm thấy tài liệu nào khớp với từ khoá tìm kiếm.';
         tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-12 text-center text-slate-400">${message}</td></tr>`;
+        paginationBar.classList.add('hidden');
         return;
     }
 
+    const totalPages = Math.max(1, Math.ceil(totalItems / DOCS_PAGE_SIZE));
+    currentDocsPage = Math.min(Math.max(1, currentDocsPage), totalPages);
+    const start = (currentDocsPage - 1) * DOCS_PAGE_SIZE;
+    const pageDocs = currentDocsView.slice(start, start + DOCS_PAGE_SIZE);
+
     tbody.innerHTML = '';
-    docs.forEach(doc => {
+    pageDocs.forEach(doc => {
         const tr = document.createElement('tr');
         tr.className = "hover:bg-white/5 transition-colors group";
         tr.innerHTML = `
@@ -100,6 +120,17 @@ function renderDocumentsTable(docs) {
         `;
         tbody.appendChild(tr);
     });
+
+    document.getElementById('docs-pagination-info').textContent =
+        `Hiển thị ${start + 1}-${Math.min(start + DOCS_PAGE_SIZE, totalItems)} / ${totalItems} tài liệu (trang ${currentDocsPage}/${totalPages})`;
+    document.getElementById('docs-prev-page').disabled = currentDocsPage <= 1;
+    document.getElementById('docs-next-page').disabled = currentDocsPage >= totalPages;
+    paginationBar.classList.remove('hidden');
+}
+
+function changeDocPage(delta) {
+    currentDocsPage += delta;
+    renderCurrentDocsPage();
 }
 
 // Lọc danh sách đã tải theo tên file/tác giả/tựa đề/phương pháp - lọc phía client,

@@ -31,11 +31,8 @@ Hãy trả lời câu hỏi của sinh viên: {req.question}
 Nếu ngữ cảnh không có thông tin, hãy nói rõ và trả lời theo kiến thức của bạn."""
 
         gemini = GeminiService(req.api_key)
-        response = gemini.client.models.generate_content(
-            model=gemini.model_name,
-            contents=prompt
-        )
-        
-        return {"status": "success", "answer": response.text}
+        answer = gemini.answer_question(prompt)
+
+        return {"status": "success", "answer": answer}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
