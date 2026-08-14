@@ -46,7 +46,8 @@ def analyze_and_process(req: AnalyzeDocumentRequest):
             "authors": result_json.get("authors", ""),
             "year": result_json.get("year", ""),
             "theory": result_json.get("theory", ""),
-            "methodology": result_json.get("methodology", "")
+            "methodology": result_json.get("methodology", ""),
+            "detailedFindings": result_json.get("detailedFindings", [])
         })
         
         authors_year = f'{result_json.get("authors", "")} ({result_json.get("year", "")})'
@@ -201,7 +202,8 @@ async def upload_pdf(
             "authors": result_json.get("authors", ""),
             "year": result_json.get("year", ""),
             "theory": result_json.get("theory", ""),
-            "methodology": result_json.get("methodology", "")
+            "methodology": result_json.get("methodology", ""),
+            "detailedFindings": result_json.get("detailedFindings", [])
         })
 
         # 5. Lưu vào Đồ thị Tri thức (Reference Graph)

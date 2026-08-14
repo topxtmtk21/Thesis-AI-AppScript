@@ -13,7 +13,15 @@ class DocumentExporter:
             md_content += f"- **Tạp chí**: {doc.get('journal', '')}\n"
             md_content += f"- **Lý thuyết**: {doc.get('theory', '')}\n"
             md_content += f"- **Phương pháp**: {doc.get('methodology', '')}\n"
-            md_content += f"- **Kết quả**: {doc.get('keyFindings', '')}\n"
+            
+            findings = doc.get("detailedFindings", [])
+            if findings:
+                md_content += "- **Các Nội dung cốt lõi**:\n"
+                for f in findings:
+                    md_content += f"  - **[{f.get('location', '')}]** {f.get('content', '')}\n"
+            else:
+                md_content += f"- **Kết quả**: {doc.get('keyFindings', '')}\n"
+                
             md_content += f"- **Khoảng trống**: {doc.get('researchGap', '')}\n"
             md_content += "---\n"
         return md_content
@@ -30,7 +38,14 @@ class DocumentExporter:
             doc.add_paragraph(f"Tạp chí: {item.get('journal', '')}")
             doc.add_paragraph(f"Lý thuyết: {item.get('theory', '')}")
             doc.add_paragraph(f"Phương pháp: {item.get('methodology', '')}")
-            doc.add_paragraph(f"Kết quả: {item.get('keyFindings', '')}")
+            
+            findings = item.get("detailedFindings", [])
+            if findings:
+                doc.add_paragraph("Các Nội dung cốt lõi:")
+                for f in findings:
+                    doc.add_paragraph(f"[{f.get('location', '')}] {f.get('content', '')}", style='List Bullet')
+            else:
+                doc.add_paragraph(f"Kết quả: {item.get('keyFindings', '')}")
             doc.add_paragraph(f"Tài liệu tham khảo (References):")
             
             refs = item.get("references", [])
@@ -53,12 +68,18 @@ class DocumentExporter:
         ws.title = "References Data"
         
         # Headers
-        headers = ["STT", "Tựa đề", "Tác giả", "Năm", "Tạp chí", "Lý thuyết", "Phương pháp", "References"]
+        headers = ["STT", "Tựa đề", "Tác giả", "Năm", "Tạp chí", "Lý thuyết", "Phương pháp", "Nội dung cốt lõi (Chi tiết)", "References"]
         ws.append(headers)
         
         for idx, item in enumerate(data_list):
             refs = item.get("references", [])
             refs_str = "\n".join(refs) if refs else "Không có"
+            
+            findings = item.get("detailedFindings", [])
+            if findings:
+                findings_str = "\n".join([f"[{f.get('location', '')}] {f.get('content', '')}" for f in findings])
+            else:
+                findings_str = item.get("keyFindings", "")
             
             row = [
                 idx + 1,
@@ -68,6 +89,7 @@ class DocumentExporter:
                 item.get('journal', ''),
                 item.get('theory', ''),
                 item.get('methodology', ''),
+                findings_str,
                 refs_str
             ]
             ws.append(row)

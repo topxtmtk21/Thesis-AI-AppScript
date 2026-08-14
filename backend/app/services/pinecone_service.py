@@ -4,6 +4,7 @@ import time
 import uuid
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
+import json
 
 class PineconeManager:
     def __init__(self, pinecone_api_key, gemini_api_key, index_name="academic-papers"):
@@ -69,7 +70,8 @@ class PineconeManager:
             "authors": doc_data.get("authors", ""),
             "year": doc_data.get("year", ""),
             "theory": doc_data.get("theory", ""),
-            "methodology": doc_data.get("methodology", "")
+            "methodology": doc_data.get("methodology", ""),
+            "detailedFindings": json.dumps(doc_data.get("detailedFindings", []), ensure_ascii=False)
         }
             
         vectors = []
@@ -151,11 +153,18 @@ class PineconeManager:
                 meta = match['metadata']
                 title = meta.get("title", "Unknown")
                 if title not in docs:
+                    detailed_findings = []
+                    try:
+                        detailed_findings = json.loads(meta.get("detailedFindings", "[]"))
+                    except:
+                        pass
+                        
                     docs[title] = {
                         "title": title,
                         "author": meta.get("author", "N/A"),
                         "theory": meta.get("theory", "N/A"),
                         "methodology": meta.get("methodology", "N/A"),
+                        "detailedFindings": detailed_findings,
                         "chunks": 0
                     }
                 docs[title]["chunks"] += 1

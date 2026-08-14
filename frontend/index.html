@@ -125,6 +125,24 @@
         </div>
     </div>
 
+    <!-- Document Details Modal -->
+    <div class="modal-overlay" id="doc-modal">
+        <div class="modal-content glass-panel" style="max-width: 800px; width: 90%;">
+            <div class="modal-header">
+                <h3 id="doc-modal-title"><i class="fa-solid fa-file-lines"></i> Chi tiết Tài liệu</h3>
+                <button onclick="closeDocModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
+                <div id="doc-modal-content">
+                    <!-- Content will be injected here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-btn" onclick="closeDocModal()">Đóng</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal Settings -->
     <div class="modal-overlay" id="settings-modal">
         <div class="modal-content glass-panel">

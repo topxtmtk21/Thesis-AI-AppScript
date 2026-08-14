@@ -31,6 +31,16 @@ Bóc tách thông tin BẮT BUỘC theo ĐÚNG định dạng JSON sau (không d
   "keyFindings": "Các kết quả chính bằng tiếng Việt",
   "researchGap": "Khoảng trống nghiên cứu (Research Gap) bằng tiếng Việt",
   "limitations": "Hạn chế của nghiên cứu (Limitations) bằng tiếng Việt",
+  "detailedFindings": [
+    {
+      "content": "Nội dung/Phát hiện cốt lõi số 1 (chi tiết, đầy đủ số liệu)",
+      "location": "Trang X / Phần Y"
+    },
+    {
+      "content": "Nội dung/Phát hiện cốt lõi số 2...",
+      "location": "Trang Z / Phần W"
+    }
+  ],
   "originalQuote": "Một câu trích dẫn nguyên văn xuất sắc và quan trọng nhất (bằng tiếng Anh)",
   "translatedQuote": "Bản dịch tiếng Việt của câu trích dẫn trên",
   "references": ["Bài báo trích dẫn 1", "Bài báo trích dẫn 2"],
@@ -101,6 +111,16 @@ Bóc tách thông tin BẮT BUỘC theo ĐÚNG định dạng JSON sau (không d
   "keyFindings": "Các kết quả chính (Bao gồm số liệu thống kê quan trọng) (Tiếng Việt)",
   "researchGap": "Khoảng trống nghiên cứu (Tiếng Việt)",
   "limitations": "Hạn chế nghiên cứu (Tiếng Việt)",
+  "detailedFindings": [
+    {
+      "content": "Nội dung/Phát hiện cốt lõi số 1 (chi tiết, đầy đủ số liệu)",
+      "location": "Trang X / Phần Y"
+    },
+    {
+      "content": "Nội dung/Phát hiện cốt lõi số 2...",
+      "location": "Trang Z / Phần W"
+    }
+  ],
   "originalQuote": "Một câu trích dẫn nguyên văn xuất sắc nhất (Tiếng Anh)",
   "translatedQuote": "Bản dịch tiếng Việt của câu trích dẫn trên",
   "full_bibliography": ["Trích dẫn 1 chi tiết...", "Trích dẫn 2 chi tiết..."],

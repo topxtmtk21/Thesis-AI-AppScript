@@ -52,7 +52,8 @@ async function loadDocuments() {
         const data = await response.json();
 
         if (data.status === 'success' && data.documents.length > 0) {
-            data.documents.forEach(doc => {
+            window.loadedDocs = data.documents;
+            data.documents.forEach((doc, index) => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td><input type="checkbox" class="doc-checkbox" value='${JSON.stringify(doc).replace(/'/g, "&apos;")}'></td>
@@ -60,7 +61,7 @@ async function loadDocuments() {
                     <td>${doc.authors || doc.author || 'Unknown'}</td>
                     <td>${doc.theory || 'Unknown'}</td>
                     <td>${doc.methodology || 'Unknown'}</td>
-                    <td><button class="send-btn" style="padding: 5px 10px;" onclick="viewDoc('${doc.id}')">Xem</button></td>
+                    <td><button class="send-btn" style="padding: 5px 10px;" onclick="viewDoc(${index})">Xem chi tiết</button></td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -172,6 +173,50 @@ function openSettings() {
 
 function closeSettings() {
     document.getElementById('settings-modal').classList.remove('active');
+}
+
+function viewDoc(index) {
+    const doc = window.loadedDocs[index];
+    if (!doc) return;
+    
+    document.getElementById('doc-modal-title').innerText = doc.title || doc.filename || 'Chi tiết Tài liệu';
+    
+    let findingsHtml = '<p style="color:var(--text-muted);">Không có phát hiện chi tiết nào.</p>';
+    if (doc.detailedFindings && doc.detailedFindings.length > 0) {
+        findingsHtml = '<ul style="padding-left: 20px; line-height: 1.6;">';
+        doc.detailedFindings.forEach(f => {
+            findingsHtml += `<li style="margin-bottom: 10px;">
+                <strong>[${f.location || 'Không rõ vị trí'}]</strong> ${f.content || ''}
+            </li>`;
+        });
+        findingsHtml += '</ul>';
+    } else if (doc.keyFindings) {
+        findingsHtml = `<p>${doc.keyFindings}</p>`;
+    }
+    
+    const content = `
+        <div style="margin-bottom: 15px;">
+            <strong>Tác giả & Năm:</strong> ${doc.authors || doc.author || 'Unknown'} (${doc.year || 'Unknown'})
+        </div>
+        <div style="margin-bottom: 15px;">
+            <strong>Lý thuyết:</strong> ${doc.theory || 'Unknown'}
+        </div>
+        <div style="margin-bottom: 15px;">
+            <strong>Phương pháp:</strong> ${doc.methodology || 'Unknown'}
+        </div>
+        <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
+        <div style="margin-bottom: 15px;">
+            <h4 style="color: var(--accent); margin-bottom: 10px;"><i class="fa-solid fa-list-check"></i> Các Nội Dung Cốt Lõi:</h4>
+            ${findingsHtml}
+        </div>
+    `;
+    
+    document.getElementById('doc-modal-content').innerHTML = content;
+    document.getElementById('doc-modal').classList.add('active');
+}
+
+function closeDocModal() {
+    document.getElementById('doc-modal').classList.remove('active');
 }
 
 function saveSettings() {
