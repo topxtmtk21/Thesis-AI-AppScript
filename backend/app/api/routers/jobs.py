@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import tempfile
+import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -28,6 +29,14 @@ router = APIRouter()
 _DB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 'data')
 os.makedirs(_DB_DIR, exist_ok=True)
 _DB_PATH = os.path.join(_DB_DIR, 'jobs.db')
+
+# Giới hạn số job THỰC SỰ chạy Gemini/Pinecone cùng lúc. Không giới hạn thì một lượt gửi
+# 25 file (MAX_FILES trong Mã.js) sẽ bắn 25 job song song, dễ dính rate-limit 429 hàng
+# loạt từ Gemini hoặc làm quá tải instance nhỏ trên Railway/Cloud Run. Job vẫn nhận vào
+# hàng đợi ngay lập tức (job_id trả về tức thì) - chỉ phần xử lý nặng mới bị nghẽn cổ chai
+# có kiểm soát ở đây.
+_MAX_CONCURRENT_JOBS = int(os.environ.get("MAX_CONCURRENT_JOBS", "3"))
+_job_concurrency_gate = threading.Semaphore(_MAX_CONCURRENT_JOBS)
 
 
 def _get_conn():
@@ -77,78 +86,104 @@ def _set_job_error(job_id: str, error: str):
 
 
 def _run_analyze_text_job(job_id: str, filename: str, text: str, api_key: str, pinecone_api_key: str):
-    try:
-        gemini = GeminiService(api_key)
-        db = get_db(pinecone_api_key, api_key)
-        kg = KnowledgeGraphManager()
+    # Chờ tới lượt nếu đã có _MAX_CONCURRENT_JOBS job khác đang xử lý - job vẫn ở
+    # trạng thái "pending" trong lúc chờ, Apps Script poll vẫn thấy bình thường.
+    with _job_concurrency_gate:
+        try:
+            gemini = GeminiService(api_key)
+            db = get_db(pinecone_api_key, api_key)
+            kg = KnowledgeGraphManager()
 
-        # Gemini phân tích nội dung và Pinecone băm+tính embedding là 2 việc độc lập
-        # (embedding chỉ cần văn bản gốc, không cần chờ kết quả Gemini) nên chạy song song
-        # thay vì tuần tự để rút ngắn tổng thời gian xử lý 1 job.
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            analyze_future = executor.submit(gemini.analyze_document, text)
-            embed_future = executor.submit(db.chunk_and_embed, text)
-            result_json = analyze_future.result()
-            text_chunks, embeddings = embed_future.result()
+            # Gemini phân tích nội dung và Pinecone băm+tính embedding là 2 việc độc lập
+            # (embedding chỉ cần văn bản gốc, không cần chờ kết quả Gemini) nên chạy song song
+            # thay vì tuần tự để rút ngắn tổng thời gian xử lý 1 job.
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                analyze_future = executor.submit(gemini.analyze_document, text)
+                embed_future = executor.submit(db.chunk_and_embed, text)
+                result_json = analyze_future.result()
+                text_chunks, embeddings = embed_future.result()
 
-        db.upsert_chunks({
-            "filename": filename,
-            "authors": result_json.get("authors", ""),
-            "year": result_json.get("year", ""),
-            "theory": result_json.get("theory", ""),
-            "methodology": result_json.get("methodology", ""),
-            "detailedFindings": result_json.get("detailedFindings", [])
-        }, text_chunks, embeddings)
+            db.upsert_chunks({
+                "filename": filename,
+                "authors": result_json.get("authors", ""),
+                "year": result_json.get("year", ""),
+                "theory": result_json.get("theory", ""),
+                "methodology": result_json.get("methodology", ""),
+                "detailedFindings": result_json.get("detailedFindings", [])
+            }, text_chunks, embeddings)
 
-        kg.add_paper_and_references(result_json)
-        kg.save_graph()
+            kg.add_paper_and_references(result_json)
+            kg.save_graph()
 
-        _set_job_success(job_id, result_json)
-    except Exception as e:
-        logger.error(f"Error in analyze_text job {job_id} ({filename}): {e}")
-        _set_job_error(job_id, handle_api_error(e, "analyze_text_job"))
+            _set_job_success(job_id, result_json)
+        except Exception as e:
+            logger.error(f"Error in analyze_text job {job_id} ({filename}): {e}")
+            _set_job_error(job_id, handle_api_error(e, "analyze_text_job"))
 
 
 def _run_analyze_pdf_job(job_id: str, filename: str, content: bytes, api_key: str, pinecone_api_key: str):
     temp_path: Optional[str] = None
+    with _job_concurrency_gate:
+        try:
+            gemini = GeminiService(api_key)
+            db = get_db(pinecone_api_key, api_key)
+            kg = KnowledgeGraphManager()
+
+            temp_input = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+            temp_input.write(content)
+            temp_input.close()
+            temp_path = temp_input.name
+
+            result_json = gemini.analyze_pdf_native(temp_path)
+
+            db.add_document({
+                "filename": filename,
+                "text": "Native PDF Analysis (No raw text stored)",
+                "authors": result_json.get("authors", ""),
+                "year": result_json.get("year", ""),
+                "theory": result_json.get("theory", ""),
+                "methodology": result_json.get("methodology", "")
+            })
+
+            kg.add_paper_and_references(result_json)
+            kg.save_graph()
+
+            _set_job_success(job_id, result_json)
+        except Exception as e:
+            logger.error(f"Error in analyze_pdf job {job_id} ({filename}): {e}")
+            _set_job_error(job_id, handle_api_error(e, "analyze_pdf_job"))
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
+
+
+def _reject_if_duplicate(filename: str, api_key: str, pinecone_api_key: str):
+    # Kiểm tra trùng lặp TRƯỚC khi tạo job/gọi Gemini - tốn 1 lượt query Pinecone (nhanh,
+    # rẻ) để tránh tốn hẳn 1 lượt phân tích Gemini (chậm, tốn tiền) cho tài liệu đã có.
     try:
-        gemini = GeminiService(api_key)
         db = get_db(pinecone_api_key, api_key)
-        kg = KnowledgeGraphManager()
-
-        temp_input = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        temp_input.write(content)
-        temp_input.close()
-        temp_path = temp_input.name
-
-        result_json = gemini.analyze_pdf_native(temp_path)
-
-        db.add_document({
-            "filename": filename,
-            "text": "Native PDF Analysis (No raw text stored)",
-            "authors": result_json.get("authors", ""),
-            "year": result_json.get("year", ""),
-            "theory": result_json.get("theory", ""),
-            "methodology": result_json.get("methodology", "")
-        })
-
-        kg.add_paper_and_references(result_json)
-        kg.save_graph()
-
-        _set_job_success(job_id, result_json)
+        is_duplicate = db.check_document_exists(filename)
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error in analyze_pdf job {job_id} ({filename}): {e}")
-        _set_job_error(job_id, handle_api_error(e, "analyze_pdf_job"))
-    finally:
-        if temp_path and os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-            except OSError:
-                pass
+        # Lỗi kết nối/xác thực Pinecone (vd sai key) - báo lỗi rõ ràng ngay tại đây thay vì
+        # để crash với traceback thô, và thay vì âm thầm bỏ qua bước kiểm tra trùng lặp.
+        logger.error(f"Error checking duplicate for {filename}: {e}")
+        raise HTTPException(status_code=500, detail=handle_api_error(e, "check_duplicate"))
+
+    if is_duplicate:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Tài liệu '{filename}' đã tồn tại trong hệ thống. Bỏ qua để tiết kiệm chi phí."
+        )
 
 
 @router.post("/jobs/analyze-text")
 def submit_analyze_text_job(req: AnalyzeDocumentRequest, background_tasks: BackgroundTasks):
+    _reject_if_duplicate(req.filename, req.api_key, req.pinecone_api_key)
     job_id = _create_job(req.filename)
     background_tasks.add_task(
         _run_analyze_text_job, job_id, req.filename, req.text, req.api_key, req.pinecone_api_key
@@ -163,6 +198,7 @@ async def submit_analyze_pdf_job(
     api_key: str = Form(...),
     pinecone_api_key: str = Form(...)
 ):
+    _reject_if_duplicate(file.filename, api_key, pinecone_api_key)
     content = await file.read()
     job_id = _create_job(file.filename)
     background_tasks.add_task(

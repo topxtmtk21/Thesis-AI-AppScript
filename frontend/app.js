@@ -25,6 +25,9 @@ function switchTab(tabId) {
     }
 }
 
+// Tài liệu vừa tải về từ Backend, giữ lại ở client để lọc/tìm kiếm không cần gọi lại API
+let allLoadedDocuments = [];
+
 // Fetch Documents
 async function loadDocuments() {
     const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
@@ -40,50 +43,81 @@ async function loadDocuments() {
 
     try {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Đang tải dữ liệu...</td></tr>';
-        
+
         const params = new URLSearchParams({
             api_key: geminiKey,
             pinecone_api_key: pineconeKey
         });
-        
+
         const response = await fetch(`${backendUrl}/api/documents?` + params.toString(), {
             headers: getBackendHeaders()
         });
         const data = await response.json();
 
-        if (data.status === 'success' && data.documents.length > 0) {
-            tbody.innerHTML = '';
-            data.documents.forEach(doc => {
-                const tr = document.createElement('tr');
-                tr.className = "hover:bg-white/5 transition-colors group";
-                tr.innerHTML = `
-                    <td class="px-6 py-4 border-b border-white/10 text-center">
-                        <input type="checkbox" class="doc-checkbox w-4 h-4 rounded border-slate-600 bg-dark-700 accent-brand-500 cursor-pointer" value='${JSON.stringify(doc).replace(/'/g, "&apos;")}'>
-                    </td>
-                    <td class="px-6 py-4 border-b border-white/10">
-                        <div class="flex items-center gap-3">
-                            <div class="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
-                                <i class="fa-solid fa-file-pdf text-red-400"></i>
-                            </div>
-                            <span class="font-medium text-slate-200 truncate max-w-[200px] block" title="${doc.filename || 'Unknown'}">${doc.filename || 'Unknown'}</span>
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 border-b border-white/10 text-slate-300">${doc.authors || doc.author || 'Unknown'}</td>
-                    <td class="px-6 py-4 border-b border-white/10 text-slate-300 truncate max-w-xs" title="${doc.title || 'Unknown'}">${doc.title || 'Unknown'}</td>
-                    <td class="px-6 py-4 border-b border-white/10 text-slate-300 truncate max-w-[150px]" title="${doc.methodology || 'Unknown'}">${doc.methodology || 'Unknown'}</td>
-                    <td class="px-6 py-4 border-b border-white/10 text-center">
-                        <button class="px-4 py-1.5 rounded-lg bg-brand-500/20 text-brand-400 hover:bg-brand-500 hover:text-white text-sm font-medium transition-all opacity-70 group-hover:opacity-100 border border-brand-500/30" onclick="viewDoc('${doc.id}')">Xem</button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-        } else {
-            tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-12 text-center text-slate-400">Chưa có tài liệu nào trong cơ sở dữ liệu.</td></tr>';
-        }
+        allLoadedDocuments = (data.status === 'success') ? data.documents : [];
+        const searchInput = document.getElementById('doc-search');
+        if (searchInput) searchInput.value = '';
+        renderDocumentsTable(allLoadedDocuments);
     } catch (error) {
         console.error('Error fetching docs:', error);
         document.getElementById('docs-body').innerHTML = '<tr><td colspan="6" class="px-6 py-12 text-center text-red-400"><i class="fa-solid fa-triangle-exclamation mr-2"></i> Lỗi kết nối Backend.</td></tr>';
     }
+}
+
+function renderDocumentsTable(docs) {
+    const tbody = document.getElementById('docs-body');
+
+    if (!docs || docs.length === 0) {
+        const message = allLoadedDocuments.length === 0
+            ? 'Chưa có tài liệu nào trong cơ sở dữ liệu.'
+            : 'Không tìm thấy tài liệu nào khớp với từ khoá tìm kiếm.';
+        tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-12 text-center text-slate-400">${message}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = '';
+    docs.forEach(doc => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-white/5 transition-colors group";
+        tr.innerHTML = `
+            <td class="px-6 py-4 border-b border-white/10 text-center">
+                <input type="checkbox" class="doc-checkbox w-4 h-4 rounded border-slate-600 bg-dark-700 accent-brand-500 cursor-pointer" value='${JSON.stringify(doc).replace(/'/g, "&apos;")}'>
+            </td>
+            <td class="px-6 py-4 border-b border-white/10">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+                        <i class="fa-solid fa-file-pdf text-red-400"></i>
+                    </div>
+                    <span class="font-medium text-slate-200 truncate max-w-[200px] block" title="${doc.filename || 'Unknown'}">${doc.filename || 'Unknown'}</span>
+                </div>
+            </td>
+            <td class="px-6 py-4 border-b border-white/10 text-slate-300">${doc.authors || doc.author || 'Unknown'}</td>
+            <td class="px-6 py-4 border-b border-white/10 text-slate-300 truncate max-w-xs" title="${doc.title || 'Unknown'}">${doc.title || 'Unknown'}</td>
+            <td class="px-6 py-4 border-b border-white/10 text-slate-300 truncate max-w-[150px]" title="${doc.methodology || 'Unknown'}">${doc.methodology || 'Unknown'}</td>
+            <td class="px-6 py-4 border-b border-white/10 text-center">
+                <button class="px-4 py-1.5 rounded-lg bg-brand-500/20 text-brand-400 hover:bg-brand-500 hover:text-white text-sm font-medium transition-all opacity-70 group-hover:opacity-100 border border-brand-500/30" onclick="viewDoc('${doc.id}')">Xem</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// Lọc danh sách đã tải theo tên file/tác giả/tựa đề/phương pháp - lọc phía client,
+// không gọi lại Backend vì toàn bộ danh sách đã có sẵn trong allLoadedDocuments.
+function filterDocuments() {
+    const query = document.getElementById('doc-search').value.trim().toLowerCase();
+    if (!query) {
+        renderDocumentsTable(allLoadedDocuments);
+        return;
+    }
+    const filtered = allLoadedDocuments.filter(doc => {
+        const haystack = [doc.filename, doc.authors, doc.author, doc.title, doc.methodology, doc.theory]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+        return haystack.includes(query);
+    });
+    renderDocumentsTable(filtered);
 }
 
 // Chatbot Logic

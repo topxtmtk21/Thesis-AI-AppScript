@@ -7,6 +7,13 @@ from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_excep
 # nên hạ "thinking level" xuống thấp nhất để giảm đáng kể thời gian phản hồi.
 _FAST_THINKING = types.ThinkingConfig(thinking_level="low")
 
+# gemini-3.7-flash hỗ trợ cửa sổ ngữ cảnh 1M token. Giữ khoảng đệm rộng rãi cho phần
+# prompt + JSON schema + output (tối đa 64k token) thay vì tính sát nút, ước lượng an
+# toàn ~2 ký tự/token cho văn bản tiếng Việt => 500.000 ký tự vẫn còn dư nhiều so với
+# giới hạn thật. Trước đây giới hạn 150.000 ký tự hay cắt mất phần cuối luận án dài
+# (kết luận, tài liệu tham khảo).
+_MAX_ANALYZE_TEXT_CHARS = 500_000
+
 
 class GeminiService:
     def __init__(self, api_key: str):
@@ -53,7 +60,7 @@ Bóc tách thông tin BẮT BUỘC theo ĐÚNG định dạng JSON sau (không d
 
 LƯU Ý: "detailedFindings" liệt kê tối đa 8 phát hiện quan trọng nhất (không cần liệt kê hết).
 --- BẮT ĐẦU VĂN BẢN ---
-{text[:150000]}
+{text[:_MAX_ANALYZE_TEXT_CHARS]}
 --- KẾT THÚC VĂN BẢN ---"""
 
         response = self.client.models.generate_content(
@@ -100,6 +107,17 @@ LƯU Ý: "detailedFindings" liệt kê tối đa 8 phát hiện quan trọng nh�
     )
     def analyze_pdf_native(self, pdf_path: str) -> dict:
         pdf_file = self.client.files.upload(file=pdf_path)
+        try:
+            return self._analyze_uploaded_pdf(pdf_file)
+        finally:
+            # File upload lên Gemini File API chỉ dùng 1 lần cho request này - dọn ngay
+            # sau khi xong, tránh tích tụ file mồ côi trong tài khoản theo thời gian.
+            try:
+                self.client.files.delete(name=pdf_file.name)
+            except Exception:
+                pass
+
+    def _analyze_uploaded_pdf(self, pdf_file) -> dict:
         prompt = """Bạn là Giáo sư hướng dẫn Tiến sĩ cực kỳ nghiêm khắc. Đọc kỹ văn bản bài báo học thuật dưới đây (chú ý BẢNG BIỂU và HÌNH ẢNH để trích xuất số liệu quan trọng).
 Bóc tách thông tin BẮT BUỘC theo ĐÚNG định dạng JSON sau (không dùng markdown):
 
