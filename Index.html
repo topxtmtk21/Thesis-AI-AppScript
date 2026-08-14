@@ -22,10 +22,19 @@
                     else document.addEventListener('DOMContentLoaded', attach);
                 } catch (bannerErr) { /* không để lỗi của chính banner làm hỏng thêm gì nữa */ }
             }
-            // Lỗi JS thông thường (bao gồm lỗi khi app.js chạy)
+            // Lỗi JS thông thường (bao gồm lỗi khi app.js chạy). Kèm thêm vài thông tin chẩn
+            // đoán (encoding trình duyệt dùng để đọc trang, tổng độ dài HTML thực nhận được
+            // so với độ dài mong đợi ~80700 ký tự) để phát hiện nếu nội dung bị cắt/hỏng khi
+            // Google phục vụ trang, thứ không thể kiểm tra được từ máy tôi.
             window.addEventListener('error', function (e) {
+                var diag = '';
+                try {
+                    diag = ' | encoding=' + document.characterSet +
+                        ' | htmlLen=' + document.documentElement.outerHTML.length +
+                        ' | readyState=' + document.readyState;
+                } catch (diagErr) { diag = ' | (không lấy được thông tin chẩn đoán)'; }
                 showBanner('⚠️ Lỗi JavaScript: ' + e.message +
-                    ' (dòng ' + e.lineno + ':' + e.colno + ', file: ' + (e.filename || 'inline') + ')');
+                    ' (dòng ' + e.lineno + ':' + e.colno + ', file: ' + (e.filename || 'inline') + ')' + diag);
             });
             // Promise bị reject nhưng không ai .catch()
             window.addEventListener('unhandledrejection', function (e) {
