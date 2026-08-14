@@ -475,17 +475,19 @@ Hãy điền thông tin vào định dạng JSON dưới đây. Nếu thông tin
     }
   ],
   "originalQuote": "Copy NGUYÊN VĂN Tiếng Anh một câu/đoạn xuất sắc nhất. Ghi chính xác số trang/phần",
-  "translatedQuote": "Bản dịch câu trên sang Tiếng Việt mang văn phong học thuật",
-  "full_bibliography": ["Trích dẫn 1 chi tiết...", "Trích dẫn 2 chi tiết..."],
-  "references": ["Liệt kê 3-5 bài báo tham khảo quan trọng nhất mà bài báo này đã trích dẫn ở phần References"]
-}`;
+  "translatedQuote": "Bản dịch câu trên sang Tiếng Việt mang văn phong học thuật"
+}
+LƯU Ý: "detailedFindings" liệt kê tối đa 8 phát hiện quan trọng nhất (không cần liệt kê hết).`;
 
+    // "thinkingLevel: low" giúp Gemini trả lời nhanh hơn đáng kể cho tác vụ trích xuất dữ liệu
+    // có cấu trúc như thế này (không cần suy luận nhiều bước).
     const payload = {
         contents: [{
             parts: [{ text: prompt }]
         }],
         generationConfig: {
-            responseMimeType: "application/json"
+            responseMimeType: "application/json",
+            thinkingConfig: { thinkingLevel: "low" }
         }
     };
 
