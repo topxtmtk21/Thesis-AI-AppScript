@@ -174,6 +174,10 @@ async def upload_pdf(
         except:
             pass # Bỏ qua nếu không có credentials.json
 
+        # Kiểm tra trùng lặp
+        if db.check_document_exists(file.filename):
+            raise HTTPException(status_code=409, detail=f"Tài liệu '{file.filename}' đã tồn tại trong hệ thống. Vui lòng không phân tích lại để tiết kiệm chi phí.")
+
         # 2. Đọc file
         temp_input = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
         content = await file.read()

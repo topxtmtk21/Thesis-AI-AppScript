@@ -121,6 +121,21 @@ class PineconeManager:
         
         return response
 
+    def check_document_exists(self, filename: str) -> bool:
+        try:
+            # Query with a dummy vector but filter by filename
+            dummy_vector = [0.0] * 768
+            response = self.index.query(
+                vector=dummy_vector,
+                top_k=1,
+                filter={"filename": {"$eq": filename}},
+                include_metadata=False
+            )
+            return len(response['matches']) > 0
+        except Exception as e:
+            print("Lỗi khi kiểm tra trùng lặp Pinecone:", e)
+            return False
+
     def get_all_documents(self):
         # Truy vấn ngẫu nhiên để lấy danh sách bài báo (giới hạn 5000 chunks)
         dummy_vector = [0.0] * 768
