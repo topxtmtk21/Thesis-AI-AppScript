@@ -1,6 +1,18 @@
 from unittest.mock import patch
 
+import pytest
+
 from app.api.routers import research
+from app.services import research_store
+
+
+@pytest.fixture(autouse=True)
+def isolated_research_db(tmp_path, monkeypatch):
+    # Every test gets its own SQLite file so tests can't see each other's rows and
+    # nothing gets written into the real backend/data/research.db.
+    monkeypatch.setattr(research_store, "_DB_PATH", str(tmp_path / "research_test.db"))
+    research_store._init_db()
+    yield
 
 
 class FakeGemini:
@@ -83,3 +95,63 @@ def test_endpoints_surface_gemini_errors_gracefully(client):
 
     assert r.status_code == 500
     assert "detail" in r.json()
+
+
+def test_analyze_news_persists_and_is_listable(client):
+    with patch.object(research, "GeminiService", FakeGemini):
+        client.post("/api/analyze-news", json={
+            "api_key": "k", "text": "x", "source_name": "VNE", "published_date": "2024-01-01"
+        })
+
+    r = client.get("/api/news-analyses")
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["source_name"] == "VNE"
+    assert items[0]["cited_sources"] == ["Bộ Y tế"]
+
+
+def test_compare_news_persists_and_is_listable(client):
+    with patch.object(research, "GeminiService", FakeGemini):
+        client.post("/api/compare-news", json={
+            "api_key": "k",
+            "articles": [{"source": "Báo A", "text": "x"}, {"source": "Báo B", "text": "y"}]
+        })
+
+    r = client.get("/api/news-comparisons")
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["sources"] == ["Báo A", "Báo B"]
+    assert items[0]["report"] == "Báo cáo so sánh khung tin"
+
+
+def test_code_interview_persists_and_is_listable(client):
+    with patch.object(research, "GeminiService", FakeGemini):
+        client.post("/api/code-interview", json={
+            "api_key": "k", "transcript": "x", "interviewee_role": "Biên tập viên"
+        })
+
+    r = client.get("/api/interview-codings")
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["interviewee_role"] == "Biên tập viên"
+    assert items[0]["themes"][0]["theme"] == "Niềm tin vào AI"
+
+
+def test_list_endpoints_start_empty(client):
+    assert client.get("/api/news-analyses").json()["items"] == []
+    assert client.get("/api/news-comparisons").json()["items"] == []
+    assert client.get("/api/interview-codings").json()["items"] == []
+
+
+def test_persistence_failure_does_not_break_successful_response(client):
+    # research_store is a supplementary layer - if saving fails (disk full,
+    # permission error...), the caller should still get their Gemini result back.
+    with patch.object(research, "GeminiService", FakeGemini), \
+         patch.object(research_store, "save_news_analysis", side_effect=RuntimeError("disk full")):
+        r = client.post("/api/analyze-news", json={"api_key": "k", "text": "x", "source_name": "VNE"})
+
+    assert r.status_code == 200
+    assert r.json()["status"] == "success"

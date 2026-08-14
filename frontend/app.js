@@ -1,15 +1,19 @@
 // Tab Switching
-function switchTab(tabId) {
+function switchTab(tabId, navEl) {
     // Update active nav link
-    document.querySelectorAll('.nav-links li').forEach(li => li.classList.remove('active'));
-    event.currentTarget.classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(li => li.classList.remove('active'));
+    if (navEl) navEl.classList.add('active');
 
     // Update title
     const titles = {
-        'documents': 'Tài liệu đã lưu',
-        'graph': 'Đồ thị Tri thức',
-        'upload': 'Tải lên PDF',
-        'notebooklm': 'Nhập từ NotebookLM'
+        'documents': 'Kho Dữ Liệu',
+        'upload': 'Tải PDF Lên',
+        'notebooklm': 'Dán từ NotebookLM',
+        'graph': 'Knowledge Graph',
+        'timeline': 'Timeline Nghiên cứu',
+        'news': 'Phân tích Khung Tin tức',
+        'interview': 'Mã hoá Phỏng vấn',
+        'kappa': 'Độ tin cậy Mã hoá'
     };
     document.getElementById('page-title').innerText = titles[tabId] || 'Dashboard';
 
@@ -17,11 +21,19 @@ function switchTab(tabId) {
     document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
     document.getElementById('view-' + tabId).classList.add('active');
 
-    // Special logic for graph
+    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
+
     if (tabId === 'graph') {
-        const frame = document.getElementById('graph-frame');
         // Reload frame to ensure physics engine starts properly
-        frame.src = frame.src; 
+        const frame = document.getElementById('graph-frame');
+        frame.src = frame.src;
+    } else if (tabId === 'timeline') {
+        const frame = document.getElementById('timeline-frame');
+        if (backendUrl) frame.src = `${backendUrl}/api/timeline`;
+    } else if (tabId === 'news') {
+        loadNewsHistory();
+    } else if (tabId === 'interview') {
+        loadInterviewHistory();
     }
 }
 
@@ -636,5 +648,372 @@ LƯU Ý: "detailedFindings" liệt kê tối đa 8 phát hiện quan trọng nh�
         statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi: ${error.message}`;
         showToast("Lỗi xử lý. Vui lòng xem thông báo bên dưới nút bấm.", "error");
     }
+}
+
+// =================================================================
+// 📄 BÁO CÁO (dùng chung cho Literature Review & So sánh Khung Tin tức)
+// =================================================================
+let currentReportText = "";
+let currentReportFilename = "report.md";
+
+function openReportModal(title, text, filename) {
+    currentReportText = text;
+    currentReportFilename = filename || "report.md";
+    document.getElementById('report-modal-title').textContent = title;
+    document.getElementById('report-modal-body').textContent = text;
+    document.getElementById('report-modal').classList.add('active');
+}
+
+function closeReportModal() {
+    document.getElementById('report-modal').classList.remove('active');
+}
+
+function downloadReportModal() {
+    const blob = new Blob([currentReportText], { type: 'text/markdown' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = currentReportFilename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+}
+
+// =================================================================
+// 🧠 TỔNG HỢP LITERATURE REVIEW (MATRIX SYNTHESIS)
+// =================================================================
+async function synthesizeLiteratureReview() {
+    const docs = getSelectedDocuments();
+    if (docs.length === 0) {
+        showToast("Vui lòng chọn ít nhất 1 tài liệu để tổng hợp.", "warning");
+        return;
+    }
+    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
+    const geminiKey = document.getElementById('global-gemini-key').value.trim();
+    if (!backendUrl || !geminiKey) {
+        showToast("Vui lòng nhập đủ Backend URL và Gemini Key trong Cài đặt.", "warning");
+        return;
+    }
+
+    const documents = docs.map(doc => ({
+        "Title/Author": (doc.filename || doc.title || "Unknown") + " - " + (doc.authors || doc.author || ""),
+        "Theory": doc.theory || "",
+        "Methodology": doc.methodology || "",
+        "Key Findings": (doc.detailedFindings || []).map(f => f.content).join("; "),
+    }));
+
+    showToast(`Đang tổng hợp ${documents.length} tài liệu...`, "warning");
+
+    try {
+        const response = await fetch(`${backendUrl}/api/synthesis`, {
+            method: 'POST',
+            headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ api_key: geminiKey, documents: documents })
+        });
+        const data = await response.json();
+        if (!response.ok || data.status !== 'success') {
+            throw new Error(data.detail || "Không thể tổng hợp.");
+        }
+        openReportModal("Literature Review Synthesis", data.report, "literature_review.md");
+        showToast("Tổng hợp thành công!", "success");
+    } catch (e) {
+        showToast("Lỗi: " + e.message, "error");
+    }
+}
+
+// =================================================================
+// 📰 PHÂN TÍCH KHUNG TIN TỨC + SO SÁNH ĐA NGUỒN
+// =================================================================
+let newsCompareMode = false;
+
+function toggleNewsCompare() {
+    newsCompareMode = !newsCompareMode;
+    document.getElementById('news-compare-blocks').classList.toggle('hidden', !newsCompareMode);
+    document.getElementById('news-compare-toggle').textContent = newsCompareMode
+        ? '- Ẩn bài báo so sánh'
+        : '+ So sánh với bài báo khác';
+}
+
+function collectNewsArticles() {
+    const articles = [];
+    for (let i = 1; i <= 3; i++) {
+        const text = document.getElementById('news-text-' + i).value.trim();
+        if (!text) continue;
+        articles.push({
+            source: document.getElementById('news-source-' + i).value.trim(),
+            date: document.getElementById('news-date-' + i).value.trim(),
+            text: text
+        });
+    }
+    return articles;
+}
+
+async function submitNewsAnalysis() {
+    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
+    const geminiKey = document.getElementById('global-gemini-key').value.trim();
+    const statusDiv = document.getElementById('news-status');
+    const resultDiv = document.getElementById('news-result');
+
+    if (!backendUrl || !geminiKey) {
+        showToast("Vui lòng nhập đủ Backend URL và Gemini Key trong Cài đặt.", "warning");
+        return;
+    }
+    const articles = collectNewsArticles();
+    if (articles.length === 0) {
+        showToast("Vui lòng dán ít nhất 1 bài báo.", "warning");
+        return;
+    }
+
+    resultDiv.classList.add('hidden');
+    statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang phân tích...`;
+
+    try {
+        if (articles.length === 1) {
+            const response = await fetch(`${backendUrl}/api/analyze-news`, {
+                method: 'POST',
+                headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({
+                    api_key: geminiKey, text: articles[0].text,
+                    source_name: articles[0].source, published_date: articles[0].date
+                })
+            });
+            const data = await response.json();
+            if (!response.ok || data.status !== 'success') throw new Error(data.detail || "Lỗi không xác định.");
+
+            const r = data.data;
+            const citedSources = Array.isArray(r.cited_sources) ? r.cited_sources.join(", ") : (r.cited_sources || "");
+            resultDiv.innerHTML = `
+                <h4 class="font-serif text-lg font-semibold text-slate-900 mb-4">Kết quả phân tích: ${articles[0].source || "Không rõ nguồn"}</h4>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div><span class="text-slate-400 font-medium block mb-1">Khung chủ đạo</span>${r.dominant_frame || "N/A"}</div>
+                    <div><span class="text-slate-400 font-medium block mb-1">Giọng điệu</span>${r.tone || "N/A"}</div>
+                    <div><span class="text-slate-400 font-medium block mb-1">Nguồn trích dẫn</span>${citedSources || "N/A"}</div>
+                    <div><span class="text-slate-400 font-medium block mb-1">Dấu hiệu thiên kiến</span>${r.bias_indicators || "N/A"}</div>
+                    <div class="col-span-2"><span class="text-slate-400 font-medium block mb-1">Tóm tắt</span>${r.summary || "N/A"}</div>
+                    <div class="col-span-2"><span class="text-slate-400 font-medium block mb-1">Ghi chú lý thuyết</span>${r.theory_notes || "N/A"}</div>
+                </div>`;
+            resultDiv.classList.remove('hidden');
+            statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #059669;"></i> Phân tích thành công!`;
+        } else {
+            const response = await fetch(`${backendUrl}/api/compare-news`, {
+                method: 'POST',
+                headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({
+                    api_key: geminiKey,
+                    articles: articles.map(a => ({ source: a.source || "Không rõ", text: a.text }))
+                })
+            });
+            const data = await response.json();
+            if (!response.ok || data.status !== 'success') throw new Error(data.detail || "Lỗi không xác định.");
+
+            statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #059669;"></i> So sánh thành công!`;
+            openReportModal("So sánh Khung Tin tức", data.report, "news_comparison.md");
+        }
+        showToast("Hoàn thành!", "success");
+        loadNewsHistory();
+    } catch (e) {
+        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #dc2626;"></i> Lỗi: ${e.message}`;
+        showToast("Lỗi: " + e.message, "error");
+    }
+}
+
+async function loadNewsHistory() {
+    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
+    const historyDiv = document.getElementById('news-history');
+    if (!backendUrl) return;
+
+    try {
+        const response = await fetch(`${backendUrl}/api/news-analyses?limit=20`, { headers: getBackendHeaders() });
+        const data = await response.json();
+        const items = (data.status === 'success') ? data.items : [];
+
+        if (items.length === 0) {
+            historyDiv.innerHTML = '<p class="text-slate-400">Chưa có dữ liệu.</p>';
+            return;
+        }
+        historyDiv.innerHTML = items.map(item => `
+            <div class="border border-slate-100 rounded-lg p-4">
+                <div class="flex justify-between items-start mb-1">
+                    <span class="font-medium text-slate-900">${item.source_name || "Không rõ nguồn"}</span>
+                    <span class="text-xs text-slate-400">${item.published_date || ""}</span>
+                </div>
+                <p class="text-slate-500">${item.dominant_frame || ""}</p>
+            </div>`).join('');
+    } catch (e) {
+        historyDiv.innerHTML = '<p class="text-slate-400">Không tải được lịch sử.</p>';
+    }
+}
+
+// =================================================================
+// 🎙️ MÃ HOÁ PHỎNG VẤN (THEMATIC CODING)
+// =================================================================
+async function submitInterviewCoding() {
+    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
+    const geminiKey = document.getElementById('global-gemini-key').value.trim();
+    const role = document.getElementById('interview-role').value.trim();
+    const transcript = document.getElementById('interview-transcript').value.trim();
+    const statusDiv = document.getElementById('interview-status');
+    const resultDiv = document.getElementById('interview-result');
+
+    if (!backendUrl || !geminiKey) {
+        showToast("Vui lòng nhập đủ Backend URL và Gemini Key trong Cài đặt.", "warning");
+        return;
+    }
+    if (!transcript) {
+        showToast("Vui lòng dán transcript phỏng vấn.", "warning");
+        return;
+    }
+
+    resultDiv.classList.add('hidden');
+    statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang mã hoá...`;
+
+    try {
+        const response = await fetch(`${backendUrl}/api/code-interview`, {
+            method: 'POST',
+            headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ api_key: geminiKey, transcript: transcript, interviewee_role: role })
+        });
+        const data = await response.json();
+        if (!response.ok || data.status !== 'success') throw new Error(data.detail || "Lỗi không xác định.");
+
+        const themes = data.data.themes || [];
+        resultDiv.innerHTML = `<h4 class="font-serif text-lg font-semibold text-slate-900 mb-4">${themes.length} chủ đề đã mã hoá</h4>` +
+            themes.map(t => `
+                <div class="border border-slate-100 rounded-lg p-4 mb-3">
+                    <p class="font-semibold text-accent-700 mb-1">${t.theme || ""}</p>
+                    <p class="text-sm text-slate-600 mb-2">${t.description || ""}</p>
+                    ${(t.supporting_quotes || []).map(q => `<p class="text-sm text-slate-500 italic border-l-2 border-slate-200 pl-3 mb-1">"${q}"</p>`).join('')}
+                    <p class="text-xs text-slate-400 mt-2">${t.prevalence_note || ""}</p>
+                </div>`).join('');
+        resultDiv.classList.remove('hidden');
+
+        statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #059669;"></i> Mã hoá thành công!`;
+        showToast(`Đã mã hoá ${themes.length} chủ đề!`, "success");
+        loadInterviewHistory();
+    } catch (e) {
+        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #dc2626;"></i> Lỗi: ${e.message}`;
+        showToast("Lỗi: " + e.message, "error");
+    }
+}
+
+async function loadInterviewHistory() {
+    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
+    const historyDiv = document.getElementById('interview-history');
+    if (!backendUrl) return;
+
+    try {
+        const response = await fetch(`${backendUrl}/api/interview-codings?limit=20`, { headers: getBackendHeaders() });
+        const data = await response.json();
+        const items = (data.status === 'success') ? data.items : [];
+
+        if (items.length === 0) {
+            historyDiv.innerHTML = '<p class="text-slate-400">Chưa có dữ liệu.</p>';
+            return;
+        }
+        historyDiv.innerHTML = items.map(item => `
+            <div class="border border-slate-100 rounded-lg p-4">
+                <div class="flex justify-between items-start mb-1">
+                    <span class="font-medium text-slate-900">${item.interviewee_role || "Không rõ vai trò"}</span>
+                    <span class="text-xs text-slate-400">${(item.themes || []).length} chủ đề</span>
+                </div>
+                <p class="text-slate-500">${item.overall_summary || ""}</p>
+            </div>`).join('');
+    } catch (e) {
+        historyDiv.innerHTML = '<p class="text-slate-400">Không tải được lịch sử.</p>';
+    }
+}
+
+// =================================================================
+// 📊 ĐỘ TIN CẬY GIỮA 2 NGƯỜI MÃ HOÁ (COHEN'S KAPPA)
+// =================================================================
+// Công thức chuẩn: κ = (P_observed - P_expected) / (1 - P_expected)
+// Y hệt hàm computeCohenKappa() trong Mã.js (đã verify bằng ví dụ tính tay, kỳ vọng
+// kappa=0.6) - port nguyên logic để đảm bảo 2 nơi cho cùng 1 kết quả.
+function computeCohenKappa(codesA, codesB) {
+    const n = codesA.length;
+    let agreeCount = 0;
+    const disagreements = [];
+    const countsA = {};
+    const countsB = {};
+    const allLabels = new Set();
+
+    for (let i = 0; i < n; i++) {
+        const a = codesA[i];
+        const b = codesB[i];
+        allLabels.add(a);
+        allLabels.add(b);
+        countsA[a] = (countsA[a] || 0) + 1;
+        countsB[b] = (countsB[b] || 0) + 1;
+        if (a === b) {
+            agreeCount++;
+        } else {
+            disagreements.push({ index: i, a: a, b: b });
+        }
+    }
+
+    const observedAgreement = agreeCount / n;
+
+    let expectedAgreement = 0;
+    allLabels.forEach(label => {
+        const pA = (countsA[label] || 0) / n;
+        const pB = (countsB[label] || 0) / n;
+        expectedAgreement += pA * pB;
+    });
+
+    const kappa = expectedAgreement >= 1
+        ? 1
+        : (observedAgreement - expectedAgreement) / (1 - expectedAgreement);
+
+    return { observedAgreement, expectedAgreement, kappa, disagreements };
+}
+
+function computeKappaWeb() {
+    const linesA = document.getElementById('kappa-coder-a').value.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+    const linesB = document.getElementById('kappa-coder-b').value.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+    const resultDiv = document.getElementById('kappa-result');
+
+    if (linesA.length === 0 || linesB.length === 0) {
+        showToast("Vui lòng nhập mã cho cả 2 người mã hoá.", "warning");
+        return;
+    }
+    if (linesA.length !== linesB.length) {
+        showToast(`Số dòng không khớp: Coder A có ${linesA.length} dòng, Coder B có ${linesB.length} dòng.`, "error");
+        return;
+    }
+
+    const result = computeCohenKappa(linesA, linesB);
+
+    let interpretation;
+    if (result.kappa < 0) interpretation = "Kém (Poor)";
+    else if (result.kappa <= 0.20) interpretation = "Nhẹ (Slight)";
+    else if (result.kappa <= 0.40) interpretation = "Vừa phải (Fair)";
+    else if (result.kappa <= 0.60) interpretation = "Trung bình (Moderate)";
+    else if (result.kappa <= 0.80) interpretation = "Đáng kể (Substantial)";
+    else interpretation = "Gần như hoàn hảo (Almost Perfect)";
+
+    const disagreementsHtml = result.disagreements.length > 0
+        ? result.disagreements.slice(0, 15).map(d => `<div class="text-sm text-slate-500 py-1 border-b border-slate-50">Dòng ${d.index + 1}: <span class="text-red-500">"${d.a}"</span> ≠ <span class="text-red-500">"${d.b}"</span></div>`).join('')
+        : '<p class="text-emerald-600 text-sm">✅ Không có dòng nào bất đồng.</p>';
+
+    resultDiv.innerHTML = `
+        <h4 class="font-serif text-lg font-semibold text-slate-900 mb-4">Kết quả (${linesA.length} item)</h4>
+        <div class="grid grid-cols-3 gap-4 mb-6">
+            <div class="bg-slate-50 rounded-lg p-4 text-center">
+                <p class="text-2xl font-bold text-slate-900">${(result.observedAgreement * 100).toFixed(1)}%</p>
+                <p class="text-xs text-slate-500 mt-1">Tỷ lệ đồng thuận</p>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-4 text-center">
+                <p class="text-2xl font-bold text-accent-600">${result.kappa.toFixed(3)}</p>
+                <p class="text-xs text-slate-500 mt-1">Cohen's Kappa</p>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-4 text-center">
+                <p class="text-sm font-bold text-slate-900 mt-1.5">${interpretation}</p>
+                <p class="text-xs text-slate-500 mt-1">Thang Landis &amp; Koch</p>
+            </div>
+        </div>
+        <h5 class="font-semibold text-slate-700 mb-2 text-sm">${result.disagreements.length} dòng bất đồng${result.disagreements.length > 15 ? ' (hiển thị 15 dòng đầu)' : ''}</h5>
+        ${disagreementsHtml}
+    `;
+    resultDiv.classList.remove('hidden');
 }
 

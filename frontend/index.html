@@ -4,390 +4,377 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Academic AI Dashboard</title>
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <!-- Tailwind CSS -->
+    <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
-            darkMode: 'class',
             theme: {
                 extend: {
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
-                        heading: ['Outfit', 'sans-serif'],
+                        serif: ['"Source Serif 4"', 'serif'],
                     },
                     colors: {
-                        brand: {
-                            50: '#f0f9ff',
-                            100: '#e0f2fe',
-                            500: '#0ea5e9',
-                            600: '#0284c7',
-                            900: '#0c4a6e',
-                        },
-                        dark: {
-                            900: '#0f172a',
-                            800: '#1e293b',
-                            700: '#334155',
+                        accent: {
+                            50: '#eef2ff', 100: '#e0e7ff', 400: '#818cf8',
+                            500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
                         }
                     }
                 }
             }
         }
     </script>
-    <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
+
     <style>
-        body {
-            background-color: #0f172a;
-            color: #f8fafc;
-            overflow: hidden;
+        body { background-color: #f8fafc; color: #0f172a; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .field-input {
+            background: #fff; border: 1px solid #e2e8f0; color: #0f172a;
+            transition: border-color 0.15s, box-shadow 0.15s;
         }
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #1e293b;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #334155;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #475569;
-        }
-        
-        .glass-panel {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-        }
-        .glass-input {
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: white;
-            transition: all 0.3s;
-        }
-        .glass-input:focus {
-            outline: none;
-            border-color: #0ea5e9;
-            box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2);
-        }
-        .view-section {
-            display: none;
-            animation: fadeIn 0.4s ease;
-        }
-        .view-section.active {
-            display: flex;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        /* Modal */
+        .field-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12); }
+        .field-input::placeholder { color: #94a3b8; }
+
+        .view-section { display: none; animation: fadeIn 0.25s ease; }
+        .view-section.active { display: flex; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+        .nav-item { border-left: 3px solid transparent; }
+        .nav-item.active { border-left-color: #4f46e5; background: #eef2ff; color: #4338ca; }
+        .nav-item.active i { color: #4f46e5; }
+
         .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.6);
-            backdrop-filter: blur(6px);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-            animation: fadeIn 0.2s ease;
+            display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.4);
+            z-index: 1000; align-items: center; justify-content: center; animation: fadeIn 0.15s ease;
         }
-        .modal-overlay.active {
-            display: flex;
-        }
-        
-        /* Toast */
-        #toast-container {
-            position: fixed;
-            bottom: 24px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-        .toast {
-            padding: 14px 28px;
-            border-radius: 12px;
-            color: white;
-            font-weight: 500;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-            animation: slideUp 0.3s ease forwards;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .toast-success { background: linear-gradient(to right, #059669, #10b981); }
-        .toast-error { background: linear-gradient(to right, #dc2626, #ef4444); border-left: 4px solid #991b1b; }
-        .toast-warning { background: linear-gradient(to right, #d97706, #f59e0b); }
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        .modal-overlay.active { display: flex; }
+
+        #toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
+        .toast { padding: 12px 22px; border-radius: 10px; color: white; font-weight: 500; font-size: 14px; box-shadow: 0 8px 20px rgba(0,0,0,0.15); display: flex; align-items: center; gap: 10px; animation: slideUp 0.25s ease forwards; }
+        .toast-success { background: #059669; }
+        .toast-error { background: #dc2626; }
+        .toast-warning { background: #d97706; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+        .theme-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; }
     </style>
 </head>
-<body class="flex h-screen antialiased selection:bg-brand-500 selection:text-white relative">
-    
-    <!-- Background Accents -->
-    <div class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-brand-500/20 rounded-full blur-[100px] pointer-events-none"></div>
-    <div class="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-purple-500/10 rounded-full blur-[120px] pointer-events-none"></div>
+<body class="flex h-screen antialiased">
 
-    <div id="app" class="flex w-full h-full relative z-10">
+    <div id="app" class="flex w-full h-full">
         <!-- Sidebar -->
-        <nav class="sidebar glass-panel w-72 flex flex-col border-r border-white/5 shadow-2xl z-20 transition-all duration-300">
-            <div class="logo flex items-center gap-4 px-8 py-10">
-                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center shadow-lg shadow-brand-500/30">
-                    <i class="fa-solid fa-microchip text-white text-xl"></i>
+        <nav class="w-72 flex flex-col bg-white border-r border-slate-200 shrink-0">
+            <div class="flex items-center gap-3 px-6 py-6 border-b border-slate-100">
+                <div class="w-10 h-10 rounded-lg bg-accent-600 flex items-center justify-center">
+                    <i class="fa-solid fa-feather-pointed text-white text-lg"></i>
                 </div>
                 <div>
-                    <h1 class="font-heading font-bold text-2xl leading-tight tracking-wide text-white">Thesis<span class="text-brand-500">AI</span></h1>
-                    <p class="text-[11px] text-slate-400 font-medium tracking-wider uppercase mt-1">Pro Dashboard</p>
+                    <h1 class="font-serif font-bold text-lg leading-tight text-slate-900">Thesis AI</h1>
+                    <p class="text-[11px] text-slate-400 font-medium tracking-wide uppercase">Research Dashboard</p>
                 </div>
             </div>
-            
-            <ul class="nav-links flex-1 px-4 py-2 space-y-2 overflow-y-auto">
-                <li class="px-5 py-3.5 rounded-xl cursor-pointer flex items-center gap-4 text-slate-300 hover:text-white hover:bg-white/5 transition-colors active" onclick="switchTab('documents')">
-                    <i class="fa-solid fa-table-list w-6 text-center text-lg"></i>
-                    <span class="font-medium text-[15px]">Kho Dữ Liệu</span>
+
+            <ul class="flex-1 px-3 py-4 space-y-1 overflow-y-auto text-sm">
+                <li class="nav-item active px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('documents', this)">
+                    <i class="fa-solid fa-table-list w-5 text-center"></i><span class="font-medium">Kho Dữ Liệu</span>
                 </li>
-                <li class="px-5 py-3.5 rounded-xl cursor-pointer flex items-center gap-4 text-slate-300 hover:text-white hover:bg-white/5 transition-colors" onclick="switchTab('upload')">
-                    <i class="fa-solid fa-cloud-arrow-up w-6 text-center text-lg"></i>
-                    <span class="font-medium text-[15px]">Tải PDF Lên</span>
+                <li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('upload', this)">
+                    <i class="fa-solid fa-cloud-arrow-up w-5 text-center"></i><span class="font-medium">Tải PDF Lên</span>
                 </li>
-                <li class="px-5 py-3.5 rounded-xl cursor-pointer flex items-center gap-4 text-slate-300 hover:text-white hover:bg-white/5 transition-colors" onclick="switchTab('graph')">
-                    <i class="fa-solid fa-diagram-project w-6 text-center text-lg"></i>
-                    <span class="font-medium text-[15px]">Knowledge Graph</span>
+                <li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('notebooklm', this)">
+                    <i class="fa-solid fa-bolt w-5 text-center"></i><span class="font-medium">Dán từ NotebookLM</span>
                 </li>
-                <div class="my-6 mx-5 h-px bg-white/10"></div>
-                <li class="px-5 py-3.5 rounded-xl cursor-pointer flex items-center gap-4 text-brand-400 hover:text-brand-300 hover:bg-brand-500/15 transition-colors bg-brand-500/5" onclick="switchTab('notebooklm')">
-                    <i class="fa-solid fa-bolt w-6 text-center text-lg"></i>
-                    <span class="font-medium text-[15px]">Nhập NotebookLM</span>
+
+                <p class="px-4 pt-5 pb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Trực quan hoá</p>
+                <li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('graph', this)">
+                    <i class="fa-solid fa-diagram-project w-5 text-center"></i><span class="font-medium">Knowledge Graph</span>
+                </li>
+                <li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('timeline', this)">
+                    <i class="fa-solid fa-calendar-days w-5 text-center"></i><span class="font-medium">Timeline Nghiên cứu</span>
+                </li>
+
+                <p class="px-4 pt-5 pb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Công cụ Báo chí học</p>
+                <li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('news', this)">
+                    <i class="fa-solid fa-newspaper w-5 text-center"></i><span class="font-medium">Phân tích Tin tức</span>
+                </li>
+                <li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('interview', this)">
+                    <i class="fa-solid fa-microphone w-5 text-center"></i><span class="font-medium">Mã hoá Phỏng vấn</span>
+                </li>
+                <li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('kappa', this)">
+                    <i class="fa-solid fa-chart-simple w-5 text-center"></i><span class="font-medium">Độ tin cậy Mã hoá</span>
                 </li>
             </ul>
-            
-            <div class="p-6 mt-auto">
-                <div class="bg-dark-800/60 rounded-2xl p-4 border border-white/5 flex items-center gap-3 shadow-inner">
-                    <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse"></div>
-                    <span class="text-sm text-slate-300 font-medium">Hệ thống sẵn sàng</span>
+
+            <div class="p-4 border-t border-slate-100">
+                <div class="bg-slate-50 rounded-xl px-4 py-3 flex items-center gap-2.5 border border-slate-100">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                    <span class="text-xs text-slate-500 font-medium">Hệ thống sẵn sàng</span>
                 </div>
             </div>
         </nav>
 
-        <!-- Main Content -->
+        <!-- Main -->
         <main class="flex-1 flex flex-col p-8 overflow-hidden gap-6">
-            <!-- Header -->
-            <header class="glass-panel rounded-2xl px-8 py-5 flex justify-between items-center border border-white/5 shadow-lg shrink-0">
-                <h2 id="page-title" class="font-heading font-semibold text-2xl text-white tracking-wide">Tài liệu Đã lưu</h2>
-                <div class="flex items-center gap-4">
-                    <button class="px-5 py-2.5 rounded-xl bg-dark-800/80 hover:bg-dark-700 text-slate-300 hover:text-white text-sm font-medium transition-colors border border-white/10 flex items-center gap-2.5" onclick="openSettings()">
+            <header class="flex justify-between items-center shrink-0">
+                <h2 id="page-title" class="font-serif font-semibold text-2xl text-slate-900">Kho Dữ Liệu</h2>
+                <div class="flex items-center gap-3">
+                    <button class="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 text-sm font-medium flex items-center gap-2" onclick="openSettings()">
                         <i class="fa-solid fa-gear"></i> Cài đặt
                     </button>
-                    <button class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white text-sm font-medium transition-colors shadow-lg shadow-brand-500/25 flex items-center gap-2.5" onclick="loadDocuments()">
+                    <button class="px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium flex items-center gap-2" onclick="loadDocuments()">
                         <i class="fa-solid fa-rotate"></i> Làm mới
                     </button>
-                    <div class="w-11 h-11 rounded-full bg-gradient-to-tr from-slate-700 to-slate-600 border border-slate-500 flex items-center justify-center overflow-hidden ml-2 shadow-md">
-                        <i class="fa-solid fa-user-graduate text-slate-300"></i>
-                    </div>
                 </div>
             </header>
 
-            <!-- Documents View -->
+            <!-- Documents -->
             <section id="view-documents" class="view-section active flex-col flex-1 min-h-0">
-                <div class="glass-panel rounded-2xl flex flex-col flex-1 overflow-hidden border border-white/5 shadow-xl">
-                    <div class="px-6 py-4 border-b border-white/10 bg-dark-800/40 flex flex-wrap gap-4 items-center justify-between">
-                        <div class="flex gap-3">
-                            <button class="px-4 py-2 rounded-lg bg-dark-700/80 hover:bg-dark-600 text-slate-200 text-sm font-medium transition-colors border border-white/5 flex items-center gap-2 hover:shadow-md" onclick="exportDocs('md')">
-                                <i class="fa-brands fa-markdown text-brand-400 text-base"></i> Markdown
-                            </button>
-                            <button class="px-4 py-2 rounded-lg bg-dark-700/80 hover:bg-dark-600 text-slate-200 text-sm font-medium transition-colors border border-white/5 flex items-center gap-2 hover:shadow-md" onclick="exportDocs('docx')">
-                                <i class="fa-solid fa-file-word text-blue-400 text-base"></i> Word
-                            </button>
-                            <button class="px-4 py-2 rounded-lg bg-dark-700/80 hover:bg-dark-600 text-slate-200 text-sm font-medium transition-colors border border-white/5 flex items-center gap-2 hover:shadow-md" onclick="exportDocs('xlsx')">
-                                <i class="fa-solid fa-file-excel text-emerald-400 text-base"></i> Excel
-                            </button>
+                <div class="theme-card flex flex-col flex-1 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-100 flex flex-wrap gap-3 items-center justify-between">
+                        <div class="flex gap-2 flex-wrap">
+                            <button class="px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-medium border border-slate-200 flex items-center gap-2" onclick="exportDocs('md')"><i class="fa-brands fa-markdown text-slate-500"></i> Markdown</button>
+                            <button class="px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-medium border border-slate-200 flex items-center gap-2" onclick="exportDocs('docx')"><i class="fa-solid fa-file-word text-blue-500"></i> Word</button>
+                            <button class="px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-medium border border-slate-200 flex items-center gap-2" onclick="exportDocs('xlsx')"><i class="fa-solid fa-file-excel text-emerald-500"></i> Excel</button>
+                            <button class="px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-medium border border-slate-200 flex items-center gap-2" onclick="exportRis()"><i class="fa-solid fa-book-bookmark text-orange-500"></i> RIS</button>
+                            <button class="px-3.5 py-2 rounded-lg bg-accent-50 hover:bg-accent-100 text-accent-700 text-sm font-medium border border-accent-100 flex items-center gap-2" onclick="synthesizeLiteratureReview()"><i class="fa-solid fa-layer-group"></i> Tổng hợp Literature Review</button>
                         </div>
-                        <div class="flex items-center gap-3">
-                            <div class="relative">
-                                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
-                                <input type="text" id="doc-search" oninput="filterDocuments()" placeholder="Tìm theo tên file, tác giả, tựa đề, phương pháp..." class="glass-input rounded-lg pl-9 pr-4 py-2 text-sm w-72">
-                            </div>
-                            <button class="px-4 py-2 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 text-sm font-medium transition-colors border border-orange-500/20 flex items-center gap-2" onclick="exportRis()">
-                                <i class="fa-solid fa-book-bookmark"></i> RIS (Zotero)
-                            </button>
+                        <div class="relative">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                            <input type="text" id="doc-search" oninput="filterDocuments()" placeholder="Tìm theo tên file, tác giả, tựa đề..." class="field-input rounded-lg pl-9 pr-4 py-2 text-sm w-72">
                         </div>
                     </div>
-                    
-                    <div class="flex-1 overflow-auto p-0">
-                        <table class="w-full text-left border-collapse text-[15px] whitespace-nowrap">
-                            <thead class="bg-dark-800/90 sticky top-0 z-10 shadow-sm backdrop-blur-md">
+                    <div class="flex-1 overflow-auto">
+                        <table class="w-full text-left border-collapse text-sm">
+                            <thead class="bg-slate-50 sticky top-0 z-10">
                                 <tr>
-                                    <th class="px-6 py-4 font-semibold text-slate-300 border-b border-white/10 w-14 text-center">
-                                        <input type="checkbox" id="select-all" onclick="toggleSelectAll()" class="w-4 h-4 rounded border-slate-600 bg-dark-700 accent-brand-500 cursor-pointer">
-                                    </th>
-                                    <th class="px-6 py-4 font-semibold text-slate-300 border-b border-white/10 tracking-wide">Tên File</th>
-                                    <th class="px-6 py-4 font-semibold text-slate-300 border-b border-white/10 tracking-wide">Tác giả</th>
-                                    <th class="px-6 py-4 font-semibold text-slate-300 border-b border-white/10 tracking-wide">Lý thuyết</th>
-                                    <th class="px-6 py-4 font-semibold text-slate-300 border-b border-white/10 tracking-wide">Phương pháp</th>
-                                    <th class="px-6 py-4 font-semibold text-slate-300 border-b border-white/10 tracking-wide text-center">Hành động</th>
+                                    <th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200 w-12 text-center"><input type="checkbox" id="select-all" onclick="toggleSelectAll()" class="w-4 h-4 rounded border-slate-300 accent-accent-600 cursor-pointer"></th>
+                                    <th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200">Tên File</th>
+                                    <th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200">Tác giả</th>
+                                    <th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200">Lý thuyết</th>
+                                    <th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200">Phương pháp</th>
+                                    <th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200 text-center">Hành động</th>
                                 </tr>
                             </thead>
-                            <tbody id="docs-body" class="divide-y divide-white/5">
+                            <tbody id="docs-body" class="divide-y divide-slate-100">
                                 <tr><td colspan="6" class="px-6 py-16 text-center text-slate-400">Đang tải dữ liệu...</td></tr>
                             </tbody>
                         </table>
                     </div>
-
-                    <div id="docs-pagination" class="px-6 py-3 border-t border-white/10 bg-dark-800/40 flex items-center justify-between text-sm text-slate-400 hidden">
+                    <div id="docs-pagination" class="px-6 py-3 border-t border-slate-100 flex items-center justify-between text-sm text-slate-500 hidden">
                         <span id="docs-pagination-info"></span>
                         <div class="flex items-center gap-2">
-                            <button id="docs-prev-page" onclick="changeDocPage(-1)" class="px-3 py-1.5 rounded-lg bg-dark-700/80 hover:bg-dark-600 text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed" disabled>
-                                <i class="fa-solid fa-chevron-left"></i>
-                            </button>
-                            <button id="docs-next-page" onclick="changeDocPage(1)" class="px-3 py-1.5 rounded-lg bg-dark-700/80 hover:bg-dark-600 text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed" disabled>
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </button>
+                            <button id="docs-prev-page" onclick="changeDocPage(-1)" class="px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed" disabled><i class="fa-solid fa-chevron-left"></i></button>
+                            <button id="docs-next-page" onclick="changeDocPage(1)" class="px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed" disabled><i class="fa-solid fa-chevron-right"></i></button>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Upload View -->
+            <!-- Upload -->
             <section id="view-upload" class="view-section flex-col flex-1 justify-center items-center h-full min-h-0">
-                <div class="w-full max-w-3xl glass-panel rounded-3xl p-12 text-center border-2 border-dashed border-slate-600/60 hover:border-brand-500/80 transition-all cursor-pointer bg-dark-800/20 hover:bg-dark-800/40" id="drop-zone" ondragover="event.preventDefault()" ondrop="handleDrop(event)" onclick="document.getElementById('file-upload').click()">
-                    <div class="w-24 h-24 bg-gradient-to-br from-brand-500/10 to-purple-500/10 rounded-2xl flex items-center justify-center mx-auto mb-8 shadow-inner border border-white/5">
-                        <i class="fa-solid fa-cloud-arrow-up text-5xl text-brand-400 drop-shadow-md"></i>
+                <div class="w-full max-w-2xl theme-card p-12 text-center border-2 border-dashed border-slate-300 hover:border-accent-400 transition-colors cursor-pointer" id="drop-zone" ondragover="event.preventDefault()" ondrop="handleDrop(event)" onclick="document.getElementById('file-upload').click()">
+                    <div class="w-20 h-20 bg-accent-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                        <i class="fa-solid fa-cloud-arrow-up text-4xl text-accent-600"></i>
                     </div>
-                    <h3 class="font-heading text-3xl font-semibold text-white mb-3 tracking-wide">Kéo thả file PDF vào đây</h3>
-                    <p class="text-slate-400 text-lg mb-10">hoặc click để chọn file từ máy tính của bạn</p>
-                    
+                    <h3 class="font-serif text-2xl font-semibold text-slate-900 mb-2">Kéo thả file PDF vào đây</h3>
+                    <p class="text-slate-500 mb-8">hoặc click để chọn file từ máy tính của bạn</p>
                     <input type="file" id="file-upload" accept=".pdf" class="hidden" onchange="handleFileSelect(event)">
-                    <button class="px-8 py-3.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-medium text-lg transition-transform transform hover:-translate-y-1 shadow-lg shadow-brand-500/25" onclick="event.stopPropagation(); document.getElementById('file-upload').click()">
-                        Duyệt file
-                    </button>
-                    
-                    <div id="upload-status" class="mt-8 font-medium text-brand-400 min-h-[28px] text-lg"></div>
+                    <button class="px-6 py-3 rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-medium" onclick="event.stopPropagation(); document.getElementById('file-upload').click()">Duyệt file</button>
+                    <div id="upload-status" class="mt-6 font-medium text-accent-700 min-h-[24px]"></div>
                 </div>
             </section>
 
-            <!-- Knowledge Graph View -->
+            <!-- NotebookLM -->
+            <section id="view-notebooklm" class="view-section flex-col flex-1 h-full min-h-0 items-center justify-center">
+                <div class="w-full max-w-3xl theme-card p-10">
+                    <div class="flex items-start gap-4 mb-6">
+                        <div class="w-12 h-12 bg-accent-50 rounded-xl flex items-center justify-center shrink-0"><i class="fa-solid fa-bolt text-xl text-accent-600"></i></div>
+                        <div>
+                            <h3 class="font-serif text-xl font-semibold text-slate-900 mb-1">Trích xuất Tự động từ NotebookLM</h3>
+                            <p class="text-slate-500 text-sm leading-relaxed">Dán nội dung bóc tách từ NotebookLM. Hệ thống dùng Gemini để phân tích và ghi vào Sheet (nếu mở qua Apps Script).</p>
+                        </div>
+                    </div>
+                    <textarea id="notebooklm-input" class="field-input w-full rounded-xl p-4 min-h-[280px] text-sm font-mono mb-6" placeholder="Paste nội dung bóc tách từ NotebookLM vào đây..."></textarea>
+                    <div class="flex items-center justify-between bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <div id="notebooklm-status" class="font-medium text-sm text-accent-700"></div>
+                        <button class="px-6 py-2.5 rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-semibold flex items-center gap-2" onclick="processNotebookLMWeb()"><i class="fa-solid fa-wand-magic-sparkles"></i> Tiến hành Phân tích</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Knowledge Graph -->
             <section id="view-graph" class="view-section flex-col flex-1 h-full min-h-0">
-                <div class="glass-panel rounded-2xl flex-1 overflow-hidden border border-white/5 shadow-xl relative">
+                <div class="theme-card flex-1 overflow-hidden relative">
                     <iframe src="knowledge_graph.html" class="w-full h-full border-none absolute inset-0" id="graph-frame"></iframe>
                 </div>
             </section>
 
-            <!-- NotebookLM View -->
-            <section id="view-notebooklm" class="view-section flex-col flex-1 h-full min-h-0 items-center justify-center">
-                <div class="w-full max-w-4xl glass-panel rounded-3xl p-10 border border-white/5 shadow-2xl relative overflow-hidden bg-dark-800/40">
-                    <div class="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-brand-400 via-purple-500 to-brand-500"></div>
-                    
-                    <div class="flex items-start gap-5 mb-8">
-                        <div class="w-14 h-14 bg-gradient-to-br from-purple-500/20 to-brand-500/20 rounded-2xl flex items-center justify-center shrink-0 border border-white/5">
-                            <i class="fa-solid fa-bolt text-2xl text-purple-400 drop-shadow-md"></i>
+            <!-- Timeline -->
+            <section id="view-timeline" class="view-section flex-col flex-1 h-full min-h-0">
+                <div class="theme-card flex-1 overflow-hidden relative">
+                    <iframe src="" class="w-full h-full border-none absolute inset-0" id="timeline-frame"></iframe>
+                </div>
+            </section>
+
+            <!-- News Analysis -->
+            <section id="view-news" class="view-section flex-col flex-1 min-h-0 gap-6 overflow-y-auto">
+                <div class="theme-card p-8">
+                    <h3 class="font-serif text-xl font-semibold text-slate-900 mb-1">📰 Phân tích Khung Tin tức</h3>
+                    <p class="text-slate-500 text-sm mb-6">Dán nội dung bài báo tin tức thật. Có thể so sánh tối đa 3 bài viết về cùng 1 sự kiện.</p>
+
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <input type="text" id="news-source-1" placeholder="Nguồn/Tòa soạn" class="field-input rounded-lg px-4 py-2.5 text-sm">
+                        <input type="text" id="news-date-1" placeholder="Ngày đăng" class="field-input rounded-lg px-4 py-2.5 text-sm">
+                    </div>
+                    <textarea id="news-text-1" class="field-input w-full rounded-lg p-4 min-h-[160px] text-sm mb-3" placeholder="Dán nội dung bài báo 1..."></textarea>
+
+                    <span class="text-accent-600 text-sm font-medium cursor-pointer hover:underline" id="news-compare-toggle" onclick="toggleNewsCompare()">+ So sánh với bài báo khác</span>
+
+                    <div id="news-compare-blocks" class="hidden mt-4 space-y-4">
+                        <div>
+                            <div class="grid grid-cols-2 gap-3 mb-2">
+                                <input type="text" id="news-source-2" placeholder="Nguồn/Tòa soạn (bài 2)" class="field-input rounded-lg px-4 py-2.5 text-sm">
+                                <input type="text" id="news-date-2" placeholder="Ngày đăng" class="field-input rounded-lg px-4 py-2.5 text-sm">
+                            </div>
+                            <textarea id="news-text-2" class="field-input w-full rounded-lg p-4 min-h-[140px] text-sm" placeholder="Dán nội dung bài báo 2..."></textarea>
                         </div>
                         <div>
-                            <h3 class="font-heading text-2xl font-bold text-white mb-2 tracking-wide">Trích xuất Tự động từ NotebookLM</h3>
-                            <p class="text-slate-400 text-[15px] leading-relaxed max-w-2xl">Dán nội dung bóc tách từ NotebookLM vào ô bên dưới. Hệ thống sẽ kết nối với Gemini để phân tích dữ liệu và ghi vào Sheet.</p>
+                            <div class="grid grid-cols-2 gap-3 mb-2">
+                                <input type="text" id="news-source-3" placeholder="Nguồn/Tòa soạn (bài 3, tuỳ chọn)" class="field-input rounded-lg px-4 py-2.5 text-sm">
+                                <input type="text" id="news-date-3" placeholder="Ngày đăng" class="field-input rounded-lg px-4 py-2.5 text-sm">
+                            </div>
+                            <textarea id="news-text-3" class="field-input w-full rounded-lg p-4 min-h-[140px] text-sm" placeholder="Dán nội dung bài báo 3 (tuỳ chọn)..."></textarea>
                         </div>
                     </div>
-                    
-                    <textarea id="notebooklm-input" class="glass-input w-full rounded-2xl p-5 min-h-[320px] text-[15px] resize-none mb-8 font-mono leading-relaxed placeholder:text-slate-600 focus:bg-dark-800/60 relative z-50 pointer-events-auto" placeholder="Paste nội dung bóc tách từ NotebookLM vào đây..."></textarea>
-                    
-                    <div class="flex items-center justify-between bg-dark-900/30 p-4 rounded-xl border border-white/5">
-                        <div id="notebooklm-status" class="font-medium text-[15px] text-brand-400 flex items-center gap-2"></div>
-                        <button class="px-8 py-3.5 rounded-xl bg-gradient-to-r from-brand-600 to-purple-600 hover:from-brand-500 hover:to-purple-500 text-white font-semibold transition-all shadow-xl shadow-purple-500/25 flex items-center gap-3 transform hover:-translate-y-1 text-lg" onclick="processNotebookLMWeb()">
-                            <i class="fa-solid fa-wand-magic-sparkles"></i> Tiến hành Phân tích
-                        </button>
-                    </div>
+
+                    <button class="mt-5 px-6 py-2.5 rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-semibold flex items-center gap-2" onclick="submitNewsAnalysis()"><i class="fa-solid fa-magnifying-glass-chart"></i> Bắt đầu Phân tích</button>
+                    <div id="news-status" class="mt-3 text-sm font-medium text-accent-700"></div>
                 </div>
+
+                <div id="news-result" class="theme-card p-8 hidden"></div>
+
+                <div class="theme-card p-8">
+                    <h4 class="font-semibold text-slate-900 mb-4">Lịch sử phân tích gần đây</h4>
+                    <div id="news-history" class="space-y-3 text-sm text-slate-500">Chưa có dữ liệu.</div>
+                </div>
+            </section>
+
+            <!-- Interview Coding -->
+            <section id="view-interview" class="view-section flex-col flex-1 min-h-0 gap-6 overflow-y-auto">
+                <div class="theme-card p-8">
+                    <h3 class="font-serif text-xl font-semibold text-slate-900 mb-1">🎙️ Mã hoá Phỏng vấn (Thematic Coding)</h3>
+                    <p class="text-slate-500 text-sm mb-6">Dán transcript phỏng vấn. Hệ thống mã hoá theo chủ đề (phương pháp Braun &amp; Clarke), kèm trích dẫn minh hoạ.</p>
+                    <input type="text" id="interview-role" placeholder="Vai trò người được phỏng vấn (VD: Biên tập viên báo X)" class="field-input w-full rounded-lg px-4 py-2.5 text-sm mb-3">
+                    <textarea id="interview-transcript" class="field-input w-full rounded-lg p-4 min-h-[240px] text-sm" placeholder="Dán transcript phỏng vấn vào đây..."></textarea>
+                    <button class="mt-5 px-6 py-2.5 rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-semibold flex items-center gap-2" onclick="submitInterviewCoding()"><i class="fa-solid fa-tags"></i> Bắt đầu Mã hoá</button>
+                    <div id="interview-status" class="mt-3 text-sm font-medium text-accent-700"></div>
+                </div>
+
+                <div id="interview-result" class="theme-card p-8 hidden"></div>
+
+                <div class="theme-card p-8">
+                    <h4 class="font-semibold text-slate-900 mb-4">Lịch sử mã hoá gần đây</h4>
+                    <div id="interview-history" class="space-y-3 text-sm text-slate-500">Chưa có dữ liệu.</div>
+                </div>
+            </section>
+
+            <!-- Cohen's Kappa -->
+            <section id="view-kappa" class="view-section flex-col flex-1 min-h-0 gap-6 overflow-y-auto">
+                <div class="theme-card p-8">
+                    <h3 class="font-serif text-xl font-semibold text-slate-900 mb-1">📊 Độ tin cậy giữa 2 người mã hoá (Cohen's Kappa)</h3>
+                    <p class="text-slate-500 text-sm mb-6">Dán danh sách mã của 2 người mã hoá, mỗi dòng 1 item, cùng thứ tự. Tính toán hoàn toàn phía trình duyệt, không gửi lên Backend.</p>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Mã của Coder A</label>
+                            <textarea id="kappa-coder-a" class="field-input w-full rounded-lg p-4 min-h-[200px] text-sm font-mono" placeholder="Yes&#10;No&#10;Yes&#10;..."></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Mã của Coder B</label>
+                            <textarea id="kappa-coder-b" class="field-input w-full rounded-lg p-4 min-h-[200px] text-sm font-mono" placeholder="Yes&#10;No&#10;No&#10;..."></textarea>
+                        </div>
+                    </div>
+                    <button class="mt-5 px-6 py-2.5 rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-semibold flex items-center gap-2" onclick="computeKappaWeb()"><i class="fa-solid fa-calculator"></i> Tính Độ tin cậy</button>
+                </div>
+                <div id="kappa-result" class="theme-card p-8 hidden"></div>
             </section>
         </main>
     </div>
 
     <!-- Floating Chatbot -->
-    <div class="fixed bottom-10 right-10 z-50 flex flex-col items-end pointer-events-none">
-        <div id="chat-window" class="glass-panel w-[380px] h-[500px] rounded-2xl mb-5 border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex-col overflow-hidden pointer-events-auto hidden transform transition-all duration-300 origin-bottom-right">
-            <div class="bg-dark-800/90 p-4 border-b border-white/5 flex items-center justify-between backdrop-blur-md">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-brand-500/20 to-purple-500/20 border border-white/5 flex items-center justify-center">
-                        <i class="fa-solid fa-robot text-brand-400 text-lg"></i>
-                    </div>
-                    <div>
-                        <h3 class="font-heading font-semibold text-white">Trợ lý AI Thesis</h3>
-                    </div>
+    <div class="fixed bottom-8 right-8 z-50 flex flex-col items-end">
+        <div id="chat-window" class="theme-card w-[380px] h-[500px] rounded-2xl mb-4 shadow-xl flex-col overflow-hidden hidden">
+            <div class="bg-slate-50 p-4 border-b border-slate-100 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-full bg-accent-50 flex items-center justify-center"><i class="fa-solid fa-robot text-accent-600"></i></div>
+                    <h3 class="font-semibold text-slate-900 text-sm">Trợ lý AI Thesis</h3>
                 </div>
-                <button onclick="toggleChat()" class="w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
-                    <i class="fa-solid fa-xmark text-lg"></i>
-                </button>
+                <button onclick="toggleChat()" class="w-8 h-8 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-500"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            
-            <div id="chat-history" class="flex-1 p-5 overflow-y-auto flex flex-col gap-4 bg-dark-900/40 scroll-smooth">
-                <div class="bg-dark-700/60 rounded-2xl rounded-tl-sm p-3.5 max-w-[85%] self-start border border-white/5 shadow-sm">
-                    <p class="text-[15px] text-slate-200 leading-relaxed">Xin chào! Tôi có thể giúp bạn tra cứu thông tin từ kho luận án. Bạn muốn hỏi gì?</p>
-                </div>
+            <div id="chat-history" class="flex-1 p-4 overflow-y-auto flex flex-col gap-3 bg-slate-50/50">
+                <div class="bg-white rounded-xl rounded-tl-sm p-3 max-w-[85%] self-start border border-slate-100 text-sm text-slate-700">Xin chào! Tôi có thể giúp bạn tra cứu thông tin từ kho luận án. Bạn muốn hỏi gì?</div>
             </div>
-            
-            <div class="p-4 border-t border-white/5 bg-dark-800/80 backdrop-blur-md">
-                <div class="flex gap-2 bg-dark-900/50 rounded-xl p-1 border border-white/5 focus-within:border-brand-500/50 focus-within:bg-dark-800/80 transition-all">
-                    <input type="text" id="chat-input" placeholder="Nhập câu hỏi..." class="bg-transparent border-none text-white flex-1 px-4 py-2.5 text-[15px] focus:outline-none placeholder:text-slate-500" onkeypress="if(event.key === 'Enter') sendMessage()">
-                    <button class="w-11 h-11 rounded-lg bg-brand-600 hover:bg-brand-500 text-white flex items-center justify-center transition-colors shadow-md" onclick="sendMessage()">
-                        <i class="fa-solid fa-paper-plane"></i>
-                    </button>
+            <div class="p-3 border-t border-slate-100 bg-white">
+                <div class="flex gap-2 bg-slate-50 rounded-xl p-1 border border-slate-200 focus-within:border-accent-400">
+                    <input type="text" id="chat-input" placeholder="Nhập câu hỏi..." class="bg-transparent border-none flex-1 px-3 py-2 text-sm focus:outline-none" onkeypress="if(event.key === 'Enter') sendMessage()">
+                    <button class="w-10 h-10 rounded-lg bg-accent-600 hover:bg-accent-700 text-white flex items-center justify-center" onclick="sendMessage()"><i class="fa-solid fa-paper-plane text-sm"></i></button>
                 </div>
             </div>
         </div>
-        
-        <button onclick="toggleChat()" class="w-16 h-16 rounded-full bg-gradient-to-tr from-brand-600 to-purple-600 text-white shadow-[0_10px_25px_rgba(14,165,233,0.4)] flex items-center justify-center hover:scale-105 transition-transform pointer-events-auto border border-white/10 group">
-            <i class="fa-solid fa-message text-2xl"></i>
-        </button>
+        <button onclick="toggleChat()" class="w-14 h-14 rounded-full bg-accent-600 hover:bg-accent-700 text-white shadow-lg flex items-center justify-center"><i class="fa-solid fa-message text-xl"></i></button>
     </div>
 
     <!-- Modal Settings -->
     <div id="settings-modal" class="modal-overlay">
-        <div class="glass-panel w-full max-w-lg rounded-3xl border border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden transform transition-all scale-95 opacity-0 duration-200">
-            <div class="px-8 py-6 border-b border-white/5 flex items-center justify-between bg-dark-800/60 backdrop-blur-md">
-                <h3 class="font-heading font-semibold text-xl text-white">Cài đặt Hệ thống</h3>
-                <button onclick="closeSettings()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        <div class="theme-card w-full max-w-lg overflow-hidden">
+            <div class="px-8 py-5 border-b border-slate-100 flex items-center justify-between">
+                <h3 class="font-serif font-semibold text-lg text-slate-900">Cài đặt Hệ thống</h3>
+                <button onclick="closeSettings()" class="text-slate-400 hover:text-slate-700"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            
-            <div class="p-8 space-y-6">
+            <div class="p-8 space-y-5">
                 <div>
-                    <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase">Backend URL</label>
-                    <input type="text" id="global-backend-url" class="glass-input w-full rounded-xl px-4 py-3.5">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Backend URL</label>
+                    <input type="text" id="global-backend-url" class="field-input w-full rounded-lg px-4 py-2.5 text-sm">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase">Gemini API Key</label>
-                    <input type="password" id="global-gemini-key" class="glass-input w-full rounded-xl px-4 py-3.5">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Gemini API Key</label>
+                    <input type="password" id="global-gemini-key" class="field-input w-full rounded-lg px-4 py-2.5 text-sm">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase">Pinecone API Key</label>
-                    <input type="password" id="global-pinecone-key" class="glass-input w-full rounded-xl px-4 py-3.5">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Pinecone API Key</label>
+                    <input type="password" id="global-pinecone-key" class="field-input w-full rounded-lg px-4 py-2.5 text-sm">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase">Backend Secret (Tuỳ chọn)</label>
-                    <input type="password" id="global-backend-secret" class="glass-input w-full rounded-xl px-4 py-3.5" placeholder="Chỉ cần nếu Backend có bật xác thực">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Backend Secret (Tuỳ chọn)</label>
+                    <input type="password" id="global-backend-secret" class="field-input w-full rounded-lg px-4 py-2.5 text-sm" placeholder="Chỉ cần nếu Backend có bật xác thực">
                 </div>
             </div>
-            
-            <div class="px-8 py-5 border-t border-white/5 bg-dark-800/60 flex items-center justify-end gap-3">
-                <button onclick="closeSettings()" class="px-6 py-2.5 rounded-xl text-slate-300 hover:bg-white/5">Hủy</button>
-                <button onclick="saveSettings()" class="px-6 py-2.5 rounded-xl bg-brand-500 text-white font-medium">Lưu</button>
+            <div class="px-8 py-5 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button onclick="closeSettings()" class="px-5 py-2 rounded-lg text-slate-600 hover:bg-slate-50 text-sm font-medium">Hủy</button>
+                <button onclick="saveSettings()" class="px-5 py-2 rounded-lg bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium">Lưu</button>
             </div>
         </div>
     </div>
 
-    <!-- Toast Notifications -->
+    <!-- Modal Report Viewer (Literature Review / Comparison) -->
+    <div id="report-modal" class="modal-overlay">
+        <div class="theme-card w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+            <div class="px-8 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+                <h3 id="report-modal-title" class="font-serif font-semibold text-lg text-slate-900">Báo cáo</h3>
+                <button onclick="closeReportModal()" class="text-slate-400 hover:text-slate-700"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="report-modal-body" class="p-8 overflow-y-auto text-sm text-slate-700 leading-relaxed whitespace-pre-wrap"></div>
+            <div class="px-8 py-5 border-t border-slate-100 flex items-center justify-end gap-3 shrink-0">
+                <button onclick="downloadReportModal()" class="px-5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium"><i class="fa-solid fa-download mr-1.5"></i>Tải .md</button>
+                <button onclick="closeReportModal()" class="px-5 py-2 rounded-lg bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium">Đóng</button>
+            </div>
+        </div>
+    </div>
+
     <div id="toast-container"></div>
 
     <script src="app.js"></script>
