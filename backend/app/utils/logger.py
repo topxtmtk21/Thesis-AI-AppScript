@@ -28,7 +28,7 @@ def handle_api_error(e: Exception, context: str) -> str:
         else:
             return "Lỗi API: Bạn đã gửi quá nhiều yêu cầu cùng lúc (Hoặc hết giới hạn 1500 câu hỏi/ngày). Hãy thiết lập Billing trên AI Studio hoặc thử lại sau."
             
-    if "403" in error_str or "API_KEY_INVALID" in error_str or "invalid" in error_str.lower():
+    if "403" in error_str or "API_KEY_INVALID" in error_str:
         return "Lỗi API: API Key của bạn bị sai, không hợp lệ hoặc chưa được cấp quyền."
         
     return f"Lỗi hệ thống ({context}): {error_str}. Tham khảo chi tiết trong Logs của Render."
