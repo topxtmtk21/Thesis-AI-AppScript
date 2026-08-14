@@ -36,6 +36,7 @@ function onOpen() {
     .addItem('⚡ 4. Chạy Phân tích Tài liệu', 'processNewDocuments')
     .addItem('⚡ 4b. Phân tích Nâng cao (Có trang & Tham khảo)', 'processDocumentsAdvanced')
     .addItem('📝 4c. Dán văn bản từ NotebookLM', 'openNotebookLMDialog')
+    .addItem('🔄 4d. Kiểm tra tiến trình đang xử lý nền', 'checkPendingJobsManually')
     .addItem('📋 5. Xem Cấu hình Hiện tại', 'showCurrentSettings')
     .addSeparator()
     .addItem('🔍 6. Kiểm tra lỗi API (Chẩn đoán)', 'runDiagnostics')
@@ -266,12 +267,176 @@ function extractTextFromFile(fileId) {
 }
 
 // =================================================================
+// ⏱️ 5.0 HÀNG ĐỢI JOB BẤT ĐỒNG BỘ (tránh giới hạn 6 phút/lần chạy của Apps Script)
+// =================================================================
+// Backend xử lý PDF/Gemini/Pinecone có thể mất vài phút cho mỗi file. Thay vì gọi
+// và CHỜ trong cùng 1 lần thực thi (bị Apps Script ngắt sau 6 phút => giới hạn
+// MAX_FILES=5 trước đây), giờ ta chỉ "gửi job" (rất nhanh) rồi để 1 trigger chạy
+// mỗi phút để hỏi kết quả và tự ghi vào Sheet khi xong.
+const PENDING_JOBS_KEY = 'PENDING_ANALYSIS_JOBS';
+const POLL_TRIGGER_HANDLER = 'checkPendingJobs';
+const JOB_TIMEOUT_MS = 30 * 60 * 1000; // 30 phút chưa xong thì coi như lỗi, tránh trigger chạy mãi
+
+function getPendingJobs() {
+  const raw = PropertiesService.getDocumentProperties().getProperty(PENDING_JOBS_KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+
+function savePendingJobs(jobs) {
+  PropertiesService.getDocumentProperties().setProperty(PENDING_JOBS_KEY, JSON.stringify(jobs));
+}
+
+function ensurePollingTrigger() {
+  const exists = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === POLL_TRIGGER_HANDLER);
+  if (!exists) {
+    ScriptApp.newTrigger(POLL_TRIGGER_HANDLER).timeBased().everyMinutes(1).create();
+  }
+}
+
+function removePollingTrigger() {
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (t.getHandlerFunction() === POLL_TRIGGER_HANDLER) {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+}
+
+// Cho phép người dùng chủ động bấm kiểm tra ngay thay vì đợi trigger tự động (chạy mỗi phút)
+function checkPendingJobsManually() {
+  const ui = SpreadsheetApp.getUi();
+  const before = getPendingJobs().length;
+  if (before === 0) {
+    ui.alert("✅ Hiện không có job nào đang chờ xử lý.");
+    return;
+  }
+  checkPendingJobs();
+  const after = getPendingJobs().length;
+  ui.alert(`🔄 Đã kiểm tra ${before} job đang chờ.\n✅ Hoàn thành: ${before - after}\n⏳ Còn đang xử lý: ${after}`);
+}
+
+function safeGetFile(fileId) {
+  try {
+    return DriveApp.getFileById(fileId);
+  } catch (e) {
+    return null;
+  }
+}
+
+// Ghi 1 dòng kết quả thành công, đúng thứ tự 17 cột của setupSheet()
+function appendJobResultRow(sheet, fileName, sourceLabel, methodLabel, result) {
+  let findingsText = result.keyFindings || "N/A";
+  if (Array.isArray(findingsText)) findingsText = findingsText.join("\n");
+
+  let detailedFindingsStr = "N/A";
+  if (result.detailedFindings && Array.isArray(result.detailedFindings) && result.detailedFindings.length > 0) {
+    detailedFindingsStr = result.detailedFindings.map(f => `- [${f.location || "Không rõ"}] ${f.content || ""}`).join("\n");
+  }
+
+  sheet.appendRow([
+    sourceLabel,
+    methodLabel,
+    fileName,
+    result.authors || "N/A",
+    result.year || "N/A",
+    result.title || "N/A",
+    result.journal || "N/A",
+    result.apa7 || "N/A",
+    result.theory || "N/A",
+    result.methodology || "N/A",
+    result.sampleSize || "N/A",
+    findingsText,
+    result.researchGap || "N/A",
+    result.limitations || "N/A",
+    detailedFindingsStr,
+    result.originalQuote || "N/A",
+    result.translatedQuote || "N/A"
+  ]);
+}
+
+function appendErrorRow(sheet, fileName, sourceLabel, errorMessage) {
+  sheet.appendRow([sourceLabel, "⚠️ LỖI", fileName, String(errorMessage).substring(0, 500)]);
+}
+
+// Được gọi mỗi phút bởi trigger để hỏi Backend job nào đã xong, ghi kết quả vào Sheet,
+// và tự xoá trigger khi không còn job nào đang chờ.
+function checkPendingJobs() {
+  const backendUrl = PropertiesService.getUserProperties().getProperty('BACKEND_URL');
+  const jobs = getPendingJobs();
+
+  if (!jobs.length || !backendUrl) {
+    savePendingJobs([]);
+    removePollingTrigger();
+    return;
+  }
+
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const stillPending = [];
+
+  jobs.forEach(job => {
+    const sheet = spreadsheet.getSheetByName(job.sheetName) || spreadsheet.getActiveSheet();
+    const sourceLabel = job.mode === 'advanced' ? "Quét thư mục (PDF gốc)" : "Quét thư mục (OCR)";
+    const methodLabel = job.mode === 'advanced' ? "Tự động (Vision AI)" : "Tự động (OCR)";
+
+    if (Date.now() - job.submittedAt > JOB_TIMEOUT_MS) {
+      appendErrorRow(sheet, job.fileName, sourceLabel, "Timeout: không nhận được phản hồi từ Backend sau 30 phút.");
+      const file = safeGetFile(job.fileId);
+      if (file) file.setDescription("PROCESSED - Timeout - " + new Date().toISOString());
+      return;
+    }
+
+    let response;
+    try {
+      response = UrlFetchApp.fetch(`${backendUrl}/api/jobs/${job.jobId}`, {
+        method: "get",
+        headers: { 'ngrok-skip-browser-warning': '69420' },
+        muteHttpExceptions: true
+      });
+    } catch (e) {
+      stillPending.push(job); // Lỗi mạng tạm thời, thử lại ở lượt poll sau
+      return;
+    }
+
+    if (response.getResponseCode() === 404) {
+      appendErrorRow(sheet, job.fileName, sourceLabel, "Job đã mất (có thể do Backend khởi động lại). Vui lòng chạy phân tích lại cho file này.");
+      const file = safeGetFile(job.fileId);
+      if (file) file.setDescription(""); // Reset để có thể gửi lại
+      return;
+    }
+
+    if (response.getResponseCode() !== 200) {
+      stillPending.push(job);
+      return;
+    }
+
+    const body = JSON.parse(response.getContentText());
+    if (body.status === 'pending') {
+      stillPending.push(job);
+      return;
+    }
+
+    const file = safeGetFile(job.fileId);
+    if (body.status === 'success' && body.data) {
+      appendJobResultRow(sheet, job.fileName, sourceLabel, methodLabel, body.data);
+      if (file) file.setDescription("PROCESSED - " + new Date().toISOString());
+    } else {
+      appendErrorRow(sheet, job.fileName, sourceLabel, body.error || "Lỗi không xác định từ Backend.");
+      if (file) file.setDescription("PROCESSED - Có lỗi - " + new Date().toISOString());
+    }
+  });
+
+  savePendingJobs(stillPending);
+  if (stillPending.length === 0) {
+    removePollingTrigger();
+  }
+}
+
+// =================================================================
 // 🤖 5. QUÉT THƯ MỤC VÀ XỬ LÝ (PDF, DOCX, ẢNH)
 // =================================================================
 function processNewDocuments() {
   const ui = SpreadsheetApp.getUi();
   const userProperties = PropertiesService.getUserProperties();
-  
+
   const apiKey = userProperties.getProperty('GEMINI_API_KEY');
   const folderId = userProperties.getProperty('FOLDER_ID');
   const backendUrl = userProperties.getProperty('BACKEND_URL');
@@ -281,16 +446,20 @@ function processNewDocuments() {
     ui.alert("⚠️ Bạn chưa cấu hình đủ API Key (Gemini, Pinecone) hoặc Folder ID!");
     return;
   }
+  if (!backendUrl) {
+    ui.alert("⚠️ Bạn chưa cấu hình Backend URL! Không thể phân tích tài liệu.");
+    return;
+  }
 
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const allowedMimeTypes = [
-    MimeType.PDF, 
-    MimeType.MICROSOFT_WORD, 
-    MimeType.JPEG, 
+    MimeType.PDF,
+    MimeType.MICROSOFT_WORD,
+    MimeType.JPEG,
     MimeType.PNG,
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   ];
-  
+
   try {
     let folder;
     try {
@@ -300,97 +469,87 @@ function processNewDocuments() {
       return;
     }
     const files = folder.getFiles();
-    let processedCount = 0;
-    const MAX_FILES = 5; 
+    let submittedCount = 0;
+    // Không còn phải chờ Gemini/Pinecone xử lý xong trong lần chạy này (chạy nền ở Backend),
+    // nên có thể gửi nhiều file hơn hẳn, chỉ còn bị giới hạn bởi thời gian OCR + gửi job.
+    const MAX_FILES = 25;
+    const newJobs = [];
 
-    while (files.hasNext() && processedCount < MAX_FILES) {
+    while (files.hasNext() && submittedCount < MAX_FILES) {
       const file = files.next();
-      
+
       // Hỗ trợ cả PDF, Word, và ảnh chụp
       if (!allowedMimeTypes.includes(file.getMimeType())) continue;
-      
-      if (file.getDescription() && file.getDescription().includes("PROCESSED")) continue;
 
-      const sheetApp = SpreadsheetApp.getActiveSpreadsheet();
-      
+      const desc = file.getDescription() || "";
+      if (desc.includes("PROCESSED") || desc.includes("SUBMITTED")) continue;
+
       try {
         // Bước 1: Trích xuất Text bằng Google Drive OCR
-        sheetApp.toast(`Đang bóc tách chữ từ: ${file.getName()}`, '⏳ Đang quét OCR', -1);
+        SpreadsheetApp.getActiveSpreadsheet().toast(`Đang bóc tách chữ từ: ${file.getName()}`, '⏳ Đang quét OCR', -1);
         const textContext = extractTextFromFile(file.getId());
-        
+
         if (!textContext || textContext.trim().length === 0) {
-           sheet.appendRow([file.getName(), "⚠️ KHÔNG CÓ KẾT QUẢ", "File rỗng hoặc hệ thống không thể trích xuất được chữ.", "", ""]);
+           appendErrorRow(sheet, file.getName(), "Quét thư mục (OCR)", "File rỗng hoặc hệ thống không thể trích xuất được chữ.");
            file.setDescription("PROCESSED - Lỗi OCR - " + new Date().toISOString());
-           processedCount++;
+           submittedCount++;
            continue;
         }
 
-        // Bước 2: Đẩy xuống Backend để gọi Gemini AI, lưu Vector DB & Knowledge Graph
-        if (!backendUrl) {
-          ui.alert("⚠️ Bạn chưa cấu hình Backend URL! Không thể phân tích tài liệu.");
-          return;
-        }
-        
-        sheetApp.toast(`Đang gửi dữ liệu sang Backend để AI phân tích: ${file.getName()}`, '🤖 Đang xử lý', -1);
-        
+        // Bước 2: Gửi job phân tích cho Backend (không chờ) - Backend sẽ tự chạy Gemini AI,
+        // lưu Vector DB & Knowledge Graph trong nền.
+        SpreadsheetApp.getActiveSpreadsheet().toast(`Đang gửi job phân tích: ${file.getName()}`, '🚀 Đã gửi', -1);
+
         const payload = {
           filename: file.getName(),
           text: textContext,
           api_key: apiKey,
           pinecone_api_key: pineconeKey
         };
-        
-        const response = UrlFetchApp.fetch(backendUrl + "/api/analyze-and-process", {
+
+        const response = UrlFetchApp.fetch(backendUrl + "/api/jobs/analyze-text", {
           method: "post",
           contentType: "application/json",
           headers: { 'ngrok-skip-browser-warning': '69420' },
           payload: JSON.stringify(payload),
           muteHttpExceptions: true
         });
-        
+
         if (response.getResponseCode() !== 200) {
-           sheet.appendRow([file.getName(), "⚠️ LỖI BACKEND", response.getContentText(), "", ""]);
-        } else {
-           const jsonResponse = JSON.parse(response.getContentText());
-           if (jsonResponse.status === "success" && jsonResponse.data) {
-             const result = jsonResponse.data;
-             let findingsText = result.keyFindings || "N/A";
-             if (result.detailedFindings && result.detailedFindings.length > 0) {
-               findingsText = result.detailedFindings.map(f => `- [${f.location || "Không rõ"}] ${f.content || ""}`).join("\n");
-             }
-             sheet.appendRow([
-               file.getName(),
-               result.authorYear || "N/A",
-               result.journal || "N/A",
-               result.apa7 || "N/A",
-               result.theory || "N/A",
-               result.methodology || "N/A",
-               result.sampleSize || "N/A",
-               findingsText,
-               result.researchGap || "N/A",
-               result.limitations || "N/A",
-               result.originalQuote || "N/A",
-               result.translatedQuote || "N/A"
-             ]);
-           } else {
-             sheet.appendRow([file.getName(), "⚠️ LỖI PHÂN TÍCH JSON TỪ BACKEND", "", "", ""]);
-           }
+           appendErrorRow(sheet, file.getName(), "Quét thư mục (OCR)", "Lỗi gửi job tới Backend: " + response.getContentText());
+           file.setDescription("PROCESSED - Lỗi gửi job - " + new Date().toISOString());
+           submittedCount++;
+           continue;
         }
-        
-        file.setDescription("PROCESSED - " + new Date().toISOString());
-        processedCount++;
+
+        const jobId = JSON.parse(response.getContentText()).job_id;
+        newJobs.push({
+          jobId: jobId,
+          fileId: file.getId(),
+          fileName: file.getName(),
+          sheetName: sheet.getName(),
+          mode: 'basic',
+          submittedAt: Date.now()
+        });
+        file.setDescription("SUBMITTED - " + new Date().toISOString());
+        submittedCount++;
 
       } catch (innerError) {
-         sheet.appendRow([file.getName(), "⚠️ LỖI XỬ LÝ", innerError.toString(), "", ""]);
+         appendErrorRow(sheet, file.getName(), "Quét thư mục (OCR)", innerError.toString());
          file.setDescription("PROCESSED - Có lỗi - " + new Date().toISOString());
-         processedCount++;
+         submittedCount++;
       }
     }
 
+    if (newJobs.length > 0) {
+      savePendingJobs(getPendingJobs().concat(newJobs));
+      ensurePollingTrigger();
+    }
+
     if (files.hasNext()) {
-      ui.alert(`⏳ Đã phân tích ${processedCount} file.\n\nHãy chạy lại Menu > "Chạy Phân tích" để xử lý tiếp các file còn lại.`);
-    } else if (processedCount > 0) {
-      ui.alert(`🎉 Hoàn thành! Đã phân tích xong ${processedCount} tài liệu mới.`);
+      ui.alert(`⏳ Đã gửi ${submittedCount} file để AI xử lý trong nền.\n\nHãy chạy lại Menu > "Chạy Phân tích" để gửi tiếp các file còn lại. Kết quả sẽ tự động xuất hiện trong Sheet, không cần chờ.`);
+    } else if (submittedCount > 0) {
+      ui.alert(`🚀 Đã gửi ${submittedCount} tài liệu cho AI xử lý trong nền.\n\nKết quả sẽ tự động được ghi vào Sheet trong vài phút tới, bạn không cần giữ trình duyệt mở hay chạy lại menu.`);
     } else {
       ui.alert(`✅ Không tìm thấy tài liệu mới nào cần phân tích trong thư mục.`);
     }
@@ -506,7 +665,7 @@ function saveConfigToProperties(backendUrl, geminiKey, pineconeKey) {
 function processDocumentsAdvanced() {
   const ui = SpreadsheetApp.getUi();
   const userProperties = PropertiesService.getUserProperties();
-  
+
   const apiKey = userProperties.getProperty('GEMINI_API_KEY');
   const folderId = userProperties.getProperty('FOLDER_ID');
   const backendUrl = userProperties.getProperty('BACKEND_URL');
@@ -516,10 +675,14 @@ function processDocumentsAdvanced() {
     ui.alert("⚠️ Bạn chưa cấu hình đủ API Key (Gemini, Pinecone) hoặc Folder ID!");
     return;
   }
+  if (!backendUrl) {
+    ui.alert("⚠️ Bạn chưa cấu hình Backend URL!");
+    return;
+  }
 
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  const allowedMimeTypes = [MimeType.PDF]; 
-  
+  const allowedMimeTypes = [MimeType.PDF];
+
   try {
     let folder;
     try {
@@ -529,85 +692,68 @@ function processDocumentsAdvanced() {
       return;
     }
     const files = folder.getFiles();
-    let processedCount = 0;
-    const MAX_FILES = 5; 
+    let submittedCount = 0;
+    const MAX_FILES = 25; // Chỉ giới hạn thời gian upload blob, không còn chờ AI xử lý
+    const newJobs = [];
 
-    while (files.hasNext() && processedCount < MAX_FILES) {
+    while (files.hasNext() && submittedCount < MAX_FILES) {
       const file = files.next();
-      
-      if (!allowedMimeTypes.includes(file.getMimeType())) continue;
-      if (file.getDescription() && file.getDescription().includes("PROCESSED_ADVANCED")) continue;
 
-      const sheetApp = SpreadsheetApp.getActiveSpreadsheet();
-      
+      if (!allowedMimeTypes.includes(file.getMimeType())) continue;
+      const desc = file.getDescription() || "";
+      if (desc.includes("PROCESSED_ADVANCED") || desc.includes("SUBMITTED_ADVANCED")) continue;
+
       try {
-        if (!backendUrl) {
-          ui.alert("⚠️ Bạn chưa cấu hình Backend URL!");
-          return;
-        }
-        
-        sheetApp.toast(`Đang upload PDF sang Backend để phân tích: ${file.getName()}`, '🤖 Đang xử lý', -1);
-        
+        SpreadsheetApp.getActiveSpreadsheet().toast(`Đang upload PDF sang Backend: ${file.getName()}`, '🚀 Đã gửi', -1);
+
         const payload = {
           file: file.getBlob(),
           api_key: apiKey,
           pinecone_api_key: pineconeKey
         };
-        
-        const response = UrlFetchApp.fetch(backendUrl + "/api/analyze-pdf-blob", {
+
+        const response = UrlFetchApp.fetch(backendUrl + "/api/jobs/analyze-pdf", {
           method: "post",
           headers: { 'ngrok-skip-browser-warning': '69420' },
           payload: payload,
           muteHttpExceptions: true
         });
-        
+
         if (response.getResponseCode() !== 200) {
-           sheet.appendRow([file.getName(), "⚠️ LỖI BACKEND", response.getContentText(), "", ""]);
-        } else {
-           const jsonResponse = JSON.parse(response.getContentText());
-           if (jsonResponse.status === "success" && jsonResponse.data) {
-             const result = jsonResponse.data;
-             let findingsText = result.keyFindings || "N/A";
-             if (result.detailedFindings && result.detailedFindings.length > 0) {
-               findingsText = result.detailedFindings.map(f => `- [${f.location || "Không rõ"}] ${f.content || ""}`).join("\n");
-             }
-             const bibText = (result.full_bibliography && Array.isArray(result.full_bibliography)) 
-                               ? result.full_bibliography.join("\n\n") 
-                               : (result.full_bibliography || "N/A");
-             sheet.appendRow([
-               file.getName(),
-               result.authorYear || "N/A",
-               result.journal || "N/A",
-               result.apa7 || "N/A",
-               result.theory || "N/A",
-               result.methodology || "N/A",
-               result.sampleSize || "N/A",
-               findingsText,
-               result.researchGap || "N/A",
-               result.limitations || "N/A",
-               result.originalQuote || "N/A",
-               result.translatedQuote || "N/A",
-               bibText
-             ]);
-           } else {
-             sheet.appendRow([file.getName(), "⚠️ LỖI PHÂN TÍCH JSON TỪ BACKEND", "", "", ""]);
-           }
+           appendErrorRow(sheet, file.getName(), "Quét thư mục (PDF gốc)", "Lỗi gửi job tới Backend: " + response.getContentText());
+           file.setDescription("PROCESSED_ADVANCED - Lỗi gửi job - " + new Date().toISOString());
+           submittedCount++;
+           continue;
         }
-        
-        file.setDescription("PROCESSED_ADVANCED - " + new Date().toISOString());
-        processedCount++;
+
+        const jobId = JSON.parse(response.getContentText()).job_id;
+        newJobs.push({
+          jobId: jobId,
+          fileId: file.getId(),
+          fileName: file.getName(),
+          sheetName: sheet.getName(),
+          mode: 'advanced',
+          submittedAt: Date.now()
+        });
+        file.setDescription("SUBMITTED_ADVANCED - " + new Date().toISOString());
+        submittedCount++;
 
       } catch (innerError) {
-         sheet.appendRow([file.getName(), "⚠️ LỖI XỬ LÝ", innerError.toString(), "", ""]);
+         appendErrorRow(sheet, file.getName(), "Quét thư mục (PDF gốc)", innerError.toString());
          file.setDescription("PROCESSED_ADVANCED - Có lỗi - " + new Date().toISOString());
-         processedCount++;
+         submittedCount++;
       }
     }
 
+    if (newJobs.length > 0) {
+      savePendingJobs(getPendingJobs().concat(newJobs));
+      ensurePollingTrigger();
+    }
+
     if (files.hasNext()) {
-      ui.alert(`⏳ Đã phân tích nâng cao ${processedCount} file.\nHãy chạy lại Menu để tiếp tục.`);
-    } else if (processedCount > 0) {
-      ui.alert(`🎉 Hoàn thành! Đã phân tích nâng cao ${processedCount} tài liệu mới.`);
+      ui.alert(`⏳ Đã gửi ${submittedCount} file để phân tích nâng cao trong nền.\nHãy chạy lại Menu để gửi tiếp các file còn lại.`);
+    } else if (submittedCount > 0) {
+      ui.alert(`🚀 Đã gửi ${submittedCount} tài liệu để phân tích nâng cao trong nền.\nKết quả sẽ tự động xuất hiện trong Sheet, không cần chờ.`);
     } else {
       ui.alert(`✅ Không tìm thấy tài liệu PDF mới nào cần phân tích.`);
     }

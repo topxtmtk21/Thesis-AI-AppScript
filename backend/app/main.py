@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from app.api.routers import document, chat
+from app.api.routers import document, chat, jobs
 import os
 
 app = FastAPI(title="Academic Tool Backend API")
@@ -18,6 +18,7 @@ app.add_middleware(
 # Include Routers
 app.include_router(document.router, prefix="/api", tags=["Document"])
 app.include_router(chat.router, prefix="/api", tags=["Chat"])
+app.include_router(jobs.router, prefix="/api", tags=["Jobs"])
 
 @app.get("/health")
 def health_check():

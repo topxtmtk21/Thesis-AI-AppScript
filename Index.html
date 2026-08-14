@@ -716,11 +716,15 @@ function handleDrop(event) {
     }
 }
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function uploadFile(file) {
     const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
     const geminiKey = document.getElementById('global-gemini-key').value.trim();
     const pineconeKey = document.getElementById('global-pinecone-key').value.trim();
-    
+
     if (!backendUrl || !geminiKey || !pineconeKey) {
         showToast("Vui lòng nhập đủ thông tin trong phần Cài đặt!", "warning");
         return;
@@ -728,38 +732,61 @@ async function uploadFile(file) {
     saveConfigToLocal(backendUrl, geminiKey, pineconeKey);
 
     const statusDiv = document.getElementById('upload-status');
-    statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang tải lên và xử lý ${file.name}... Quá trình này có thể mất vài phút.`;
-    
+    statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang tải lên ${file.name}...`;
+
     const formData = new FormData();
     formData.append("file", file);
     formData.append("api_key", geminiKey);
     formData.append("pinecone_api_key", pineconeKey);
 
+    // Gửi job rồi hỏi lại định kỳ thay vì giữ 1 request duy nhất chờ suốt quá trình
+    // Gemini phân tích + lưu Pinecone (có thể mất vài phút và dễ bị timeout ở tầng hosting).
     try {
-        const response = await fetch(`${backendUrl}/api/upload-pdf`, {
+        const submitResponse = await fetch(`${backendUrl}/api/jobs/analyze-pdf`, {
             method: 'POST',
             headers: {
                 'ngrok-skip-browser-warning': '69420'
             },
             body: formData
         });
-        
-        if (response.ok) {
-            statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #10b981;"></i> Xử lý thành công! File PDF đã được tô màu highlight và lưu trữ.`;
-            
-            // Tải file PDF đã được highlight về
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = file.name.replace(".pdf", "_highlighted.pdf");
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-        } else {
-            const data = await response.json();
-            statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi: ${data.detail || "Không thể xử lý"}`;
+
+        if (!submitResponse.ok) {
+            const data = await submitResponse.json().catch(() => ({}));
+            statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi: ${data.detail || "Không thể gửi file"}`;
+            return;
         }
+
+        const { job_id } = await submitResponse.json();
+        statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang phân tích ${file.name} (có thể mất vài phút)...`;
+
+        const maxAttempts = 120; // tối đa ~10 phút (poll mỗi 5s)
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            await sleep(5000);
+
+            const pollResponse = await fetch(`${backendUrl}/api/jobs/${job_id}`, {
+                headers: { 'ngrok-skip-browser-warning': '69420' }
+            });
+
+            if (pollResponse.status === 404) {
+                statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Job đã mất (Backend có thể vừa khởi động lại). Vui lòng thử lại.`;
+                return;
+            }
+
+            const job = await pollResponse.json();
+            if (job.status === 'success') {
+                statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #10b981;"></i> Đã phân tích xong "${job.data?.title || file.name}"!`;
+                showToast("Phân tích thành công! Xem kết quả ở tab Kho Dữ Liệu.", "success");
+                loadDocuments();
+                return;
+            }
+            if (job.status === 'error') {
+                statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi: ${job.error || "Không thể xử lý"}`;
+                return;
+            }
+            // status === 'pending' -> tiếp tục vòng lặp
+        }
+
+        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Quá thời gian chờ. Việc phân tích vẫn có thể đang chạy ở Backend, hãy kiểm tra lại tab Kho Dữ Liệu sau ít phút.`;
     } catch (e) {
         statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi kết nối: ${e.message}`;
     }

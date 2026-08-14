@@ -39,9 +39,18 @@ class KnowledgeGraphManager:
     def add_relation(self, source, target, relation_type, source_group="author", target_group="concept"):
         self.add_node(source, group=source_group)
         self.add_node(target, group=target_group)
-            
+
         if not self.graph.has_edge(source, target):
             self.graph.add_edge(source, target, label=relation_type)
+
+    def add_paper_and_references(self, result_json: dict):
+        # Thêm 1 bài báo cùng danh sách tài liệu tham khảo của nó vào đồ thị.
+        authors_year = f'{result_json.get("authors", "")} ({result_json.get("year", "")})'
+        self.add_node(authors_year, title=result_json.get("title", ""), group=1)
+        for ref in result_json.get("references", []):
+            self.add_node(ref, group=2)
+            self.add_relation(authors_year, ref, "cites")
+        return authors_year
 
     def generate_html(self, output_path="graph.html"):
         net = Network(height='750px', width='100%', bgcolor='#222222', font_color='white', directed=True)

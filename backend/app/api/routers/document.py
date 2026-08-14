@@ -52,11 +52,7 @@ def analyze_and_process(req: AnalyzeDocumentRequest):
             "detailedFindings": result_json.get("detailedFindings", [])
         })
         
-        authors_year = f'{result_json.get("authors", "")} ({result_json.get("year", "")})'
-        kg.add_node(authors_year, title=result_json.get("title", ""), group=1)
-        for ref in result_json.get("references", []):
-            kg.add_node(ref, group=2)
-            kg.add_relation(authors_year, ref, "cites")
+        kg.add_paper_and_references(result_json)
         kg.save_graph()
         
         return {"status": "success", "data": result_json}
@@ -91,11 +87,7 @@ async def analyze_pdf_blob(
             "methodology": result_json.get("methodology", "")
         })
         
-        authors_year = f'{result_json.get("authors", "")} ({result_json.get("year", "")})'
-        kg.add_node(authors_year, title=result_json.get("title", ""), group=1)
-        for ref in result_json.get("references", []):
-            kg.add_node(ref, group=2)
-            kg.add_relation(authors_year, ref, "cites")
+        kg.add_paper_and_references(result_json)
         kg.save_graph()
         
         return {"status": "success", "data": result_json}
@@ -135,11 +127,7 @@ async def analyze_raw_text(
             "methodology": result_json.get("methodology", "")
         })
         
-        authors_year = f'{result_json.get("authors", "")} ({result_json.get("year", "")})'
-        kg.add_node(authors_year, title=result_json.get("title", ""), group=1)
-        for ref in result_json.get("references", []):
-            kg.add_node(ref, group=2)
-            kg.add_relation(authors_year, ref, "cites")
+        kg.add_paper_and_references(result_json)
         kg.save_graph()
         
         return {"status": "success", "data": result_json}
@@ -231,11 +219,7 @@ async def upload_pdf(
         })
 
         # 5. Lưu vào Đồ thị Tri thức (Reference Graph)
-        authors_year = f'{result_json.get("authors", "")} ({result_json.get("year", "")})'
-        kg.add_node(authors_year, title=result_json.get("title", ""), group=1)
-        for ref in result_json.get("references", []):
-            kg.add_node(ref, group=2)
-            kg.add_relation(authors_year, ref, "cites")
+        kg.add_paper_and_references(result_json)
         kg.save_graph()
 
         # Trả về JSON để Frontend nhanh chóng hiển thị dữ liệu
