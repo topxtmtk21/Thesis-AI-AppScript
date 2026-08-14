@@ -6,7 +6,7 @@ from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_excep
 class GeminiService:
     def __init__(self, api_key: str):
         self.client = genai.Client(api_key=api_key)
-        self.model_name = 'gemini-2.5-flash'
+        self.model_name = 'gemini-3.7-flash'
 
     @retry(
         wait=wait_exponential(multiplier=5, min=15, max=60),

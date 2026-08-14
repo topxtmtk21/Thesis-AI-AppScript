@@ -572,7 +572,7 @@ function runDiagnostics() {
     return;
   }
   
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
   const payload = { "contents": [{ "parts": [{ "text": "Hello" }] }] };
   
   try {
@@ -1029,7 +1029,7 @@ Hãy điền thông tin vào định dạng JSON dưới đây. Nếu thông tin
     muteHttpExceptions: true
   };
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
 
   let response;
   let responseCode;

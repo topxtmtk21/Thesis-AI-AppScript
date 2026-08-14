@@ -496,7 +496,7 @@ Hãy điền thông tin vào định dạng JSON dưới đây. Nếu thông tin
         let backoff = 3000;
         
         while (retries > 0) {
-            response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+            response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${geminiKey}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
