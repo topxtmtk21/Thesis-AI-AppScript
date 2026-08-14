@@ -688,13 +688,37 @@ function processChat(question, useSpecificFile = false) {
 // =================================================================
 // ⚙️ 9. ĐỒNG BỘ CẤU HÌNH TỪ WEB APP XUỐNG SHEETS
 // =================================================================
-function saveConfigToProperties(backendUrl, geminiKey, pineconeKey, backendSecret) {
+function saveConfigToProperties(backendUrl, geminiKey, pineconeKey, backendSecret, spreadsheetId) {
   const userProperties = PropertiesService.getUserProperties();
   if (backendUrl) userProperties.setProperty('BACKEND_URL', backendUrl);
   if (geminiKey) userProperties.setProperty('GEMINI_API_KEY', geminiKey);
   if (pineconeKey) userProperties.setProperty('PINECONE_API_KEY', pineconeKey);
   if (backendSecret) userProperties.setProperty('BACKEND_SECRET', backendSecret);
+  if (spreadsheetId) userProperties.setProperty('SPREADSHEET_ID', spreadsheetId);
   return true;
+}
+
+// Web App đọc hàm này khi mở qua Apps Script để nạp cấu hình đã lưu trong Sheets vào
+// localStorage của trình duyệt (đồng bộ 1 chiều Sheets -> Web App, bổ sung cho chiều
+// ngược lại đã có ở saveConfigToProperties). spreadsheetId tự lấy từ Sheet đang mở nếu
+// người dùng chưa từng đặt riêng, để Web App biết ghi vào đúng file Sheet nào.
+function getStoredConfig() {
+  const userProperties = PropertiesService.getUserProperties();
+  let spreadsheetId = userProperties.getProperty('SPREADSHEET_ID');
+  if (!spreadsheetId) {
+    try {
+      spreadsheetId = SpreadsheetApp.getActiveSpreadsheet().getId();
+    } catch (e) {
+      spreadsheetId = '';
+    }
+  }
+  return {
+    backendUrl: userProperties.getProperty('BACKEND_URL') || '',
+    geminiKey: userProperties.getProperty('GEMINI_API_KEY') || '',
+    pineconeKey: userProperties.getProperty('PINECONE_API_KEY') || '',
+    backendSecret: userProperties.getProperty('BACKEND_SECRET') || '',
+    spreadsheetId: spreadsheetId || ''
+  };
 }
 // =================================================================
 // 🚀 6. PHÂN TÍCH NÂNG CAO (GỬI TRỰC TIẾP PDF ĐỂ LẤY SỐ TRANG)

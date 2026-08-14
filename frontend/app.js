@@ -241,18 +241,41 @@ document.addEventListener('DOMContentLoaded', () => {
     const savedGemini = localStorage.getItem('gemini_key');
     const savedPinecone = localStorage.getItem('pinecone_key');
     const savedSecret = localStorage.getItem('backend_secret');
+    const savedSpreadsheetId = localStorage.getItem('spreadsheet_id');
 
     if (savedBackend) document.getElementById('global-backend-url').value = savedBackend;
     if (savedGemini) document.getElementById('global-gemini-key').value = savedGemini;
     if (savedPinecone) document.getElementById('global-pinecone-key').value = savedPinecone;
     if (savedSecret) document.getElementById('global-backend-secret').value = savedSecret;
+    if (savedSpreadsheetId) document.getElementById('global-spreadsheet-id').value = savedSpreadsheetId;
+
+    // Đồng bộ chiều Sheets -> Web App: chỉ khả dụng khi mở qua Apps Script. Field nào
+    // localStorage CHƯA có mới nạp từ Sheets (localStorage ưu tiên vì người dùng có thể
+    // đã tự sửa tay trên trình duyệt đó; Sheets chỉ là giá trị mặc định cho lần đầu mở
+    // Web App trên máy/trình duyệt mới).
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run.withSuccessHandler((cfg) => {
+            if (!cfg) return;
+            if (!savedBackend && cfg.backendUrl) { document.getElementById('global-backend-url').value = cfg.backendUrl; }
+            if (!savedGemini && cfg.geminiKey) { document.getElementById('global-gemini-key').value = cfg.geminiKey; }
+            if (!savedPinecone && cfg.pineconeKey) { document.getElementById('global-pinecone-key').value = cfg.pineconeKey; }
+            if (!savedSecret && cfg.backendSecret) { document.getElementById('global-backend-secret').value = cfg.backendSecret; }
+            if (!savedSpreadsheetId && cfg.spreadsheetId) { document.getElementById('global-spreadsheet-id').value = cfg.spreadsheetId; }
+            saveConfigToLocal(cfg.backendUrl, cfg.geminiKey, cfg.pineconeKey, cfg.backendSecret, cfg.spreadsheetId);
+        }).getStoredConfig();
+    }
 });
 
-function saveConfigToLocal(backendUrl, geminiKey, pineconeKey, backendSecret) {
+function saveConfigToLocal(backendUrl, geminiKey, pineconeKey, backendSecret, spreadsheetId) {
     if (backendUrl) localStorage.setItem('backend_url', backendUrl);
     if (geminiKey) localStorage.setItem('gemini_key', geminiKey);
     if (pineconeKey) localStorage.setItem('pinecone_key', pineconeKey);
     if (backendSecret) localStorage.setItem('backend_secret', backendSecret);
+    if (spreadsheetId) localStorage.setItem('spreadsheet_id', spreadsheetId);
+}
+
+function getSpreadsheetId() {
+    return localStorage.getItem('spreadsheet_id') || '';
 }
 
 // Header dùng chung cho mọi fetch() tới Backend: thêm X-Backend-Secret nếu người dùng
@@ -279,14 +302,15 @@ function saveSettings() {
     const gemini = document.getElementById('global-gemini-key').value.trim();
     const pinecone = document.getElementById('global-pinecone-key').value.trim();
     const backendSecret = document.getElementById('global-backend-secret').value.trim();
+    const spreadsheetId = document.getElementById('global-spreadsheet-id').value.trim();
 
-    saveConfigToLocal(backend, gemini, pinecone, backendSecret);
+    saveConfigToLocal(backend, gemini, pinecone, backendSecret, spreadsheetId);
 
     // Đồng bộ cấu hình sang Google Sheets
     if (typeof google !== 'undefined' && google.script && google.script.run) {
         google.script.run.withSuccessHandler(() => {
             console.log("Synced to Sheets");
-        }).saveConfigToProperties(backend, gemini, pinecone, backendSecret);
+        }).saveConfigToProperties(backend, gemini, pinecone, backendSecret, spreadsheetId);
     }
 
     closeSettings();
@@ -447,6 +471,8 @@ async function uploadFile(file) {
     formData.append("file", file);
     formData.append("api_key", geminiKey);
     formData.append("pinecone_api_key", pineconeKey);
+    const spreadsheetId = getSpreadsheetId();
+    if (spreadsheetId) formData.append("spreadsheet_id", spreadsheetId);
 
     // Gửi job rồi hỏi lại định kỳ thay vì giữ 1 request duy nhất chờ suốt quá trình
     // Gemini phân tích + lưu Pinecone (có thể mất vài phút và dễ bị timeout ở tầng hosting).
@@ -626,23 +652,51 @@ LƯU Ý: "detailedFindings" liệt kê tối đa 8 phát hiện quan trọng nh�
         }
 
         statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang ghi dữ liệu vào Sheet...`;
-        
-        if (typeof google === 'undefined' || !google.script || !google.script.run) {
-            statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b;"></i> Cảnh báo: google.script.run không khả dụng (bạn đang chạy file HTML trực tiếp thay vì trên Apps Script). Không thể lưu.`;
+
+        if (typeof google !== 'undefined' && google.script && google.script.run) {
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #10b981;"></i> Trích xuất và lưu thành công! Bảng tính đã được cập nhật.`;
+                    document.getElementById('notebooklm-input').value = ""; // Clear input
+                    showToast("Đã lưu thành công vào Sheet!", "success");
+                })
+                .withFailureHandler(function(error) {
+                    statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi ghi vào Sheet: ${error.message}`;
+                    showToast("Lỗi xử lý. Vui lòng xem thông báo bên dưới nút bấm.", "error");
+                })
+                .appendNotebookLMRow(result);
             return;
         }
 
-        google.script.run
-            .withSuccessHandler(function(res) {
-                statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #10b981;"></i> Trích xuất và lưu thành công! Bảng tính đã được cập nhật.`;
-                document.getElementById('notebooklm-input').value = ""; // Clear input
-                showToast("Đã lưu thành công vào Sheet!", "success");
-            })
-            .withFailureHandler(function(error) {
-                statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi ghi vào Sheet: ${error.message}`;
-                showToast("Lỗi xử lý. Vui lòng xem thông báo bên dưới nút bấm.", "error");
-            })
-            .appendNotebookLMRow(result);
+        // Chạy độc lập (không qua Apps Script): ghi vào Sheet thật qua Backend (Service
+        // Account) nếu đã cấu hình Spreadsheet ID, còn không thì chỉ cảnh báo như trước.
+        const spreadsheetId = getSpreadsheetId();
+        const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
+        if (!spreadsheetId || !backendUrl) {
+            statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b;"></i> Cảnh báo: bạn đang chạy độc lập (không qua Apps Script) và chưa nhập Spreadsheet ID trong Cài đặt, nên không thể lưu vào Sheet.`;
+            return;
+        }
+        try {
+            const sheetResponse = await fetch(`${backendUrl}/api/sheets/append-row`, {
+                method: 'POST',
+                headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({
+                    spreadsheet_id: spreadsheetId,
+                    source: "Dán từ NotebookLM (Web App)",
+                    method: "Dán văn bản (NotebookLM)",
+                    filename: "",
+                    result: result
+                })
+            });
+            const sheetData = await sheetResponse.json();
+            if (!sheetResponse.ok || sheetData.status !== 'success') throw new Error(sheetData.detail || "Lỗi không xác định.");
+            statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #10b981;"></i> Trích xuất và lưu thành công! Bảng tính đã được cập nhật.`;
+            document.getElementById('notebooklm-input').value = "";
+            showToast("Đã lưu thành công vào Sheet!", "success");
+        } catch (sheetError) {
+            statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi ghi vào Sheet: ${sheetError.message}`;
+            showToast("Lỗi xử lý. Vui lòng xem thông báo bên dưới nút bấm.", "error");
+        }
 
     } catch (error) {
         statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi: ${error.message}`;
@@ -774,7 +828,8 @@ async function submitNewsAnalysis() {
                 headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({
                     api_key: geminiKey, text: articles[0].text,
-                    source_name: articles[0].source, published_date: articles[0].date
+                    source_name: articles[0].source, published_date: articles[0].date,
+                    spreadsheet_id: getSpreadsheetId()
                 })
             });
             const data = await response.json();
@@ -800,7 +855,8 @@ async function submitNewsAnalysis() {
                 headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({
                     api_key: geminiKey,
-                    articles: articles.map(a => ({ source: a.source || "Không rõ", text: a.text }))
+                    articles: articles.map(a => ({ source: a.source || "Không rõ", text: a.text })),
+                    spreadsheet_id: getSpreadsheetId()
                 })
             });
             const data = await response.json();
@@ -871,7 +927,7 @@ async function submitInterviewCoding() {
         const response = await fetch(`${backendUrl}/api/code-interview`, {
             method: 'POST',
             headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ api_key: geminiKey, transcript: transcript, interviewee_role: role })
+            body: JSON.stringify({ api_key: geminiKey, transcript: transcript, interviewee_role: role, spreadsheet_id: getSpreadsheetId() })
         });
         const data = await response.json();
         if (!response.ok || data.status !== 'success') throw new Error(data.detail || "Lỗi không xác định.");

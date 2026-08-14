@@ -155,3 +155,44 @@ def test_persistence_failure_does_not_break_successful_response(client):
 
     assert r.status_code == 200
     assert r.json()["status"] == "success"
+
+
+def test_analyze_news_writes_to_sheet_when_spreadsheet_id_given(client):
+    from app.services import sheets_service
+
+    with patch.object(research, "GeminiService", FakeGemini), \
+         patch.object(sheets_service, "append_news_analysis_row") as mock_append:
+        r = client.post("/api/analyze-news", json={
+            "api_key": "k", "text": "x", "source_name": "VNE", "published_date": "2024-01-01",
+            "spreadsheet_id": "sheet123"
+        })
+
+    assert r.status_code == 200
+    mock_append.assert_called_once()
+    assert mock_append.call_args[0][0] == "sheet123"
+
+
+def test_analyze_news_skips_sheet_write_without_spreadsheet_id(client):
+    from app.services import sheets_service
+
+    with patch.object(research, "GeminiService", FakeGemini), \
+         patch.object(sheets_service, "append_news_analysis_row") as mock_append:
+        r = client.post("/api/analyze-news", json={"api_key": "k", "text": "x", "source_name": "VNE"})
+
+    assert r.status_code == 200
+    mock_append.assert_not_called()
+
+
+def test_sheet_write_failure_does_not_break_successful_response(client):
+    # Writing to the real Google Sheet is best-effort (missing Service Account share,
+    # bad spreadsheet_id...) - it must never fail the parent request.
+    from app.services import sheets_service
+
+    with patch.object(research, "GeminiService", FakeGemini), \
+         patch.object(sheets_service, "append_interview_coding_rows", side_effect=RuntimeError("403 Forbidden")):
+        r = client.post("/api/code-interview", json={
+            "api_key": "k", "transcript": "x", "interviewee_role": "Biên tập viên", "spreadsheet_id": "sheet123"
+        })
+
+    assert r.status_code == 200
+    assert r.json()["status"] == "success"

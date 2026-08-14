@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.models.schemas import AnalyzeNewsRequest, CompareNewsRequest, CodeInterviewRequest
-from app.services import research_store
+from app.services import research_store, sheets_service
 from app.services.gemini_service import GeminiService
 from app.utils.logger import get_logger, handle_api_error
 
@@ -20,12 +20,27 @@ def _try_persist(save_fn, *args):
         logger.error(f"Error persisting to research_store: {e}")
 
 
+def _try_write_sheet(write_fn, *args):
+    # Ghi vào Google Sheet thật qua Service Account chỉ chạy khi người dùng có cấu hình
+    # spreadsheet_id - best-effort giống _try_persist, không được làm hỏng response chính
+    # (vd chưa share Sheet cho Service Account, hoặc chưa cấu hình GOOGLE_SERVICE_ACCOUNT_JSON).
+    try:
+        write_fn(*args)
+    except Exception as e:
+        logger.error(f"Error writing to Google Sheet: {e}")
+
+
 @router.post("/analyze-news")
 def analyze_news(req: AnalyzeNewsRequest):
     try:
         gemini = GeminiService(req.api_key)
         result_json = gemini.analyze_news_framing(req.text, req.source_name, req.published_date)
         _try_persist(research_store.save_news_analysis, req.source_name, req.published_date, result_json)
+        if req.spreadsheet_id:
+            _try_write_sheet(
+                sheets_service.append_news_analysis_row,
+                req.spreadsheet_id, req.source_name, req.published_date, result_json
+            )
         return {"status": "success", "data": result_json}
     except Exception as e:
         logger.error(f"Error in analyze_news: {e}")
@@ -51,6 +66,11 @@ def code_interview(req: CodeInterviewRequest):
         gemini = GeminiService(req.api_key)
         result_json = gemini.code_interview_transcript(req.transcript, req.interviewee_role)
         _try_persist(research_store.save_interview_coding, req.interviewee_role, result_json)
+        if req.spreadsheet_id:
+            _try_write_sheet(
+                sheets_service.append_interview_coding_rows,
+                req.spreadsheet_id, req.interviewee_role, result_json
+            )
         return {"status": "success", "data": result_json}
     except Exception as e:
         logger.error(f"Error in code_interview: {e}")

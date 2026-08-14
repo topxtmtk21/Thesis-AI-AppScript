@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from google import genai
 from google.genai import types
 from pinecone import Pinecone
-from app.api.routers import document, chat, jobs, research
+from app.api.routers import document, chat, jobs, research, sheets
 import os
 
 app = FastAPI(title="Academic Tool Backend API")
@@ -53,6 +53,7 @@ app.include_router(document.router, prefix="/api", tags=["Document"])
 app.include_router(chat.router, prefix="/api", tags=["Chat"])
 app.include_router(jobs.router, prefix="/api", tags=["Jobs"])
 app.include_router(research.router, prefix="/api", tags=["Research"])
+app.include_router(sheets.router, prefix="/api", tags=["Sheets"])
 
 @app.get("/health")
 def health_check(api_key: Optional[str] = None, pinecone_api_key: Optional[str] = None):

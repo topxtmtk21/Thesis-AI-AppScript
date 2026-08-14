@@ -14,6 +14,7 @@ from app.api.routers.document import get_db
 from app.models.schemas import AnalyzeDocumentRequest
 from app.services.gemini_service import GeminiService
 from app.services.graph_service import KnowledgeGraphManager
+from app.services import sheets_service
 from app.utils.logger import get_logger, handle_api_error
 
 logger = get_logger("jobs_router")
@@ -121,7 +122,7 @@ def _run_analyze_text_job(job_id: str, filename: str, text: str, api_key: str, p
             _set_job_error(job_id, handle_api_error(e, "analyze_text_job"))
 
 
-def _run_analyze_pdf_job(job_id: str, filename: str, content: bytes, api_key: str, pinecone_api_key: str):
+def _run_analyze_pdf_job(job_id: str, filename: str, content: bytes, api_key: str, pinecone_api_key: str, spreadsheet_id: str = ""):
     temp_path: Optional[str] = None
     with _job_concurrency_gate:
         try:
@@ -147,6 +148,16 @@ def _run_analyze_pdf_job(job_id: str, filename: str, content: bytes, api_key: st
 
             kg.add_paper_and_references(result_json)
             kg.save_graph()
+
+            if spreadsheet_id:
+                # Ghi vào Sheet thật (Service Account) chỉ khi Web App độc lập có cấu hình
+                # Spreadsheet ID - best-effort, không phá job nếu lỗi (vd chưa share quyền).
+                try:
+                    sheets_service.append_main_document_row(
+                        spreadsheet_id, "Web App", "Tải PDF", filename, result_json
+                    )
+                except Exception as e:
+                    logger.error(f"Error writing PDF job result to Google Sheet: {e}")
 
             _set_job_success(job_id, result_json)
         except Exception as e:
@@ -196,13 +207,14 @@ async def submit_analyze_pdf_job(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     api_key: str = Form(...),
-    pinecone_api_key: str = Form(...)
+    pinecone_api_key: str = Form(...),
+    spreadsheet_id: str = Form("")
 ):
     _reject_if_duplicate(file.filename, api_key, pinecone_api_key)
     content = await file.read()
     job_id = _create_job(file.filename)
     background_tasks.add_task(
-        _run_analyze_pdf_job, job_id, file.filename, content, api_key, pinecone_api_key
+        _run_analyze_pdf_job, job_id, file.filename, content, api_key, pinecone_api_key, spreadsheet_id
     )
     return {"status": "success", "job_id": job_id}
 

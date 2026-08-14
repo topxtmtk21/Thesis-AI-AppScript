@@ -46,13 +46,23 @@ class AnalyzeNewsRequest(BaseModel):
     text: str
     source_name: Optional[str] = ""
     published_date: Optional[str] = ""
+    spreadsheet_id: Optional[str] = ""
 
 class CompareNewsRequest(BaseModel):
     api_key: str
     articles: List[Dict[str, str]]  # mỗi item: {"source": ..., "text": ...}
+    spreadsheet_id: Optional[str] = ""
 
 class CodeInterviewRequest(BaseModel):
     api_key: str
     transcript: str
     interviewee_role: Optional[str] = ""
+    spreadsheet_id: Optional[str] = ""
+
+class AppendSheetRowRequest(BaseModel):
+    spreadsheet_id: str
+    source: Optional[str] = "Web App"
+    method: Optional[str] = "Dán văn bản (NotebookLM)"
+    filename: Optional[str] = ""
+    result: Dict[str, Any]
 
