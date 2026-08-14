@@ -1,1454 +1,379 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Academic AI Dashboard</title>
-
-    <!-- Hiện lỗi JS trực tiếp lên trang (dải đỏ trên cùng) thay vì chỉ log vào Console -
-         để chẩn đoán được sự cố ngay cả khi người dùng không mở được DevTools. Đặt đầu
-         tiên, trước cả app.js, để bắt được lỗi từ mọi script chạy sau nó. -->
-    <script>
-        (function () {
-            function showBanner(text) {
-                try {
-                    var banner = document.createElement('div');
-                    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999999;' +
-                        'background:#dc2626;color:#fff;padding:14px 20px;font:13px/1.5 monospace;' +
-                        'white-space:pre-wrap;word-break:break-word;';
-                    banner.textContent = text;
-                    var attach = function () { document.body && document.body.prepend(banner); };
-                    if (document.body) attach();
-                    else document.addEventListener('DOMContentLoaded', attach);
-                } catch (bannerErr) { /* không để lỗi của chính banner làm hỏng thêm gì nữa */ }
-            }
-            // Lỗi JS thông thường (bao gồm lỗi khi app.js chạy). Kèm thêm vài thông tin chẩn
-            // đoán (encoding trình duyệt dùng để đọc trang, tổng độ dài HTML thực nhận được
-            // so với độ dài mong đợi ~80700 ký tự) để phát hiện nếu nội dung bị cắt/hỏng khi
-            // Google phục vụ trang, thứ không thể kiểm tra được từ máy tôi.
-            window.addEventListener('error', function (e) {
-                var diag = '';
-                try {
-                    diag = ' | encoding=' + document.characterSet +
-                        ' | htmlLen=' + document.documentElement.outerHTML.length +
-                        ' | readyState=' + document.readyState;
-                } catch (diagErr) { diag = ' | (không lấy được thông tin chẩn đoán)'; }
-                showBanner('⚠️ Lỗi JavaScript: ' + e.message +
-                    ' (dòng ' + e.lineno + ':' + e.colno + ', file: ' + (e.filename || 'inline') + ')' + diag);
-            });
-            // Promise bị reject nhưng không ai .catch()
-            window.addEventListener('unhandledrejection', function (e) {
-                showBanner('⚠️ Promise lỗi: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
-            });
-            // Trình duyệt chặn theo Content-Security-Policy (vd chặn onclick inline) - đây
-            // không phải "error" JS thông thường nên cần bắt riêng.
-            document.addEventListener('securitypolicyviolation', function (e) {
-                showBanner('⚠️ Bị chặn bởi Content-Security-Policy: ' + e.violatedDirective +
-                    ' (nguồn bị chặn: ' + e.blockedURI + ')');
-            });
-        })();
-    </script>
-
-    <!-- app.js chạy TRƯỚC mọi CDN bên ngoài (Tailwind/Fonts/FontAwesome) và không phụ
-         thuộc gì vào chúng - script trong HTML chạy tuần tự theo thứ tự văn bản, nên nếu
-         đặt sau 1 script CDN mà CDN đó bị treo/chặn (từng xảy ra khi mở qua Apps Script
-         HtmlService), toàn bộ menu/nút bấm sẽ liệt vì app.js không bao giờ được thực thi.
-         Đặt lên đầu để menu luôn hoạt động dù CDN có tải chậm/lỗi (chỉ ảnh hưởng giao diện). -->
-    <script>
-// Tab Switching
-function switchTab(tabId, navEl) {
-    // Update active nav link
-    document.querySelectorAll('.nav-item').forEach(li => li.classList.remove('active'));
-    if (navEl) navEl.classList.add('active');
-
-    // Update title
-    const titles = {
-        'documents': 'Kho Dữ Liệu',
-        'upload': 'Tải PDF Lên',
-        'notebooklm': 'Dán từ NotebookLM',
-        'graph': 'Knowledge Graph',
-        'timeline': 'Timeline Nghiên cứu',
-        'news': 'Phân tích Khung Tin tức',
-        'interview': 'Mã hoá Phỏng vấn',
-        'kappa': 'Độ tin cậy Mã hoá'
-    };
-    document.getElementById('page-title').innerText = titles[tabId] || 'Dashboard';
-
-    // Show selected view
-    document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
-    document.getElementById('view-' + tabId).classList.add('active');
-
-    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
-
-    if (tabId === 'graph') {
-        // Reload frame to ensure physics engine starts properly
-        const frame = document.getElementById('graph-frame');
-        frame.src = frame.src;
-    } else if (tabId === 'timeline') {
-        const frame = document.getElementById('timeline-frame');
-        if (backendUrl) frame.src = `${backendUrl}/api/timeline`;
-    } else if (tabId === 'news') {
-        loadNewsHistory();
-    } else if (tabId === 'interview') {
-        loadInterviewHistory();
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Academic AI Dashboard</title>
+<script>
+(function () {
+function showBanner(text) {
+try {
+var banner = document.createElement('div');
+banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999999;' +
+'background:#dc2626;color:#fff;padding:14px 20px;font:13px/1.5 monospace;' +
+'white-space:pre-wrap;word-break:break-word;';
+banner.textContent = text;
+var attach = function () { document.body && document.body.prepend(banner); };
+if (document.body) attach();
+else document.addEventListener('DOMContentLoaded', attach);
+} catch (bannerErr) { /* không để lỗi của chính banner làm hỏng thêm gì nữa */ }
 }
-
-// Tài liệu vừa tải về từ Backend, giữ lại ở client để lọc/tìm kiếm không cần gọi lại API
-let allLoadedDocuments = [];
-
-// Fetch Documents
-async function loadDocuments() {
-    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
-    const geminiKey = document.getElementById('global-gemini-key').value.trim();
-    const pineconeKey = document.getElementById('global-pinecone-key').value.trim();
-    const tbody = document.getElementById('docs-body');
-
-    if (!geminiKey || !pineconeKey || !backendUrl) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: #f87171;">Vui lòng nhập đủ Backend URL, Gemini Key và Pinecone Key ở góc trên phải rồi nhấn Load.</td></tr>';
-        return;
-    }
-    saveConfigToLocal(backendUrl, geminiKey, pineconeKey);
-
-    try {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Đang tải dữ liệu...</td></tr>';
-
-        const params = new URLSearchParams({
-            api_key: geminiKey,
-            pinecone_api_key: pineconeKey
-        });
-
-        const response = await fetch(`${backendUrl}/api/documents?` + params.toString(), {
-            headers: getBackendHeaders()
-        });
-        const data = await response.json();
-
-        allLoadedDocuments = (data.status === 'success') ? data.documents : [];
-        const searchInput = document.getElementById('doc-search');
-        if (searchInput) searchInput.value = '';
-        renderDocumentsTable(allLoadedDocuments);
-    } catch (error) {
-        console.error('Error fetching docs:', error);
-        document.getElementById('docs-body').innerHTML = '<tr><td colspan="6" class="px-6 py-12 text-center text-red-400"><i class="fa-solid fa-triangle-exclamation mr-2"></i> Lỗi kết nối Backend.</td></tr>';
-    }
-}
-
-// Phân trang phía client - bảng không phân trang sẽ render hết vào 1 lần, chậm dần khi
-// kho tài liệu lên tới hàng trăm dòng.
-const DOCS_PAGE_SIZE = 20;
-let currentDocsView = [];
-let currentDocsPage = 1;
-
-function renderDocumentsTable(docs) {
-    currentDocsView = docs || [];
-    currentDocsPage = 1;
-    renderCurrentDocsPage();
-}
-
-function renderCurrentDocsPage() {
-    const tbody = document.getElementById('docs-body');
-    const paginationBar = document.getElementById('docs-pagination');
-    const totalItems = currentDocsView.length;
-
-    if (totalItems === 0) {
-        const message = allLoadedDocuments.length === 0
-            ? 'Chưa có tài liệu nào trong cơ sở dữ liệu.'
-            : 'Không tìm thấy tài liệu nào khớp với từ khoá tìm kiếm.';
-        tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-12 text-center text-slate-400">${message}</td></tr>`;
-        paginationBar.classList.add('hidden');
-        return;
-    }
-
-    const totalPages = Math.max(1, Math.ceil(totalItems / DOCS_PAGE_SIZE));
-    currentDocsPage = Math.min(Math.max(1, currentDocsPage), totalPages);
-    const start = (currentDocsPage - 1) * DOCS_PAGE_SIZE;
-    const pageDocs = currentDocsView.slice(start, start + DOCS_PAGE_SIZE);
-
-    tbody.innerHTML = '';
-    pageDocs.forEach(doc => {
-        const tr = document.createElement('tr');
-        tr.className = "hover:bg-white/5 transition-colors group";
-        tr.innerHTML = `
-            <td class="px-6 py-4 border-b border-white/10 text-center">
-                <input type="checkbox" class="doc-checkbox w-4 h-4 rounded border-slate-600 bg-dark-700 accent-brand-500 cursor-pointer" value='${JSON.stringify(doc).replace(/'/g, "&apos;")}'>
-            </td>
-            <td class="px-6 py-4 border-b border-white/10">
-                <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
-                        <i class="fa-solid fa-file-pdf text-red-400"></i>
-                    </div>
-                    <span class="font-medium text-slate-200 truncate max-w-[200px] block" title="${doc.filename || 'Unknown'}">${doc.filename || 'Unknown'}</span>
-                </div>
-            </td>
-            <td class="px-6 py-4 border-b border-white/10 text-slate-300">${doc.authors || doc.author || 'Unknown'}</td>
-            <td class="px-6 py-4 border-b border-white/10 text-slate-300 truncate max-w-xs" title="${doc.title || 'Unknown'}">${doc.title || 'Unknown'}</td>
-            <td class="px-6 py-4 border-b border-white/10 text-slate-300 truncate max-w-[150px]" title="${doc.methodology || 'Unknown'}">${doc.methodology || 'Unknown'}</td>
-            <td class="px-6 py-4 border-b border-white/10 text-center">
-                <button class="px-4 py-1.5 rounded-lg bg-brand-500/20 text-brand-400 hover:bg-brand-500 hover:text-white text-sm font-medium transition-all opacity-70 group-hover:opacity-100 border border-brand-500/30" onclick="viewDoc('${doc.id}')">Xem</button>
-            </td>
-        `;
-        tbody.appendChild(tr);
-    });
-
-    document.getElementById('docs-pagination-info').textContent =
-        `Hiển thị ${start + 1}-${Math.min(start + DOCS_PAGE_SIZE, totalItems)} / ${totalItems} tài liệu (trang ${currentDocsPage}/${totalPages})`;
-    document.getElementById('docs-prev-page').disabled = currentDocsPage <= 1;
-    document.getElementById('docs-next-page').disabled = currentDocsPage >= totalPages;
-    paginationBar.classList.remove('hidden');
-}
-
-function changeDocPage(delta) {
-    currentDocsPage += delta;
-    renderCurrentDocsPage();
-}
-
-// Lọc danh sách đã tải theo tên file/tác giả/tựa đề/phương pháp - lọc phía client,
-// không gọi lại Backend vì toàn bộ danh sách đã có sẵn trong allLoadedDocuments.
-function filterDocuments() {
-    const query = document.getElementById('doc-search').value.trim().toLowerCase();
-    if (!query) {
-        renderDocumentsTable(allLoadedDocuments);
-        return;
-    }
-    const filtered = allLoadedDocuments.filter(doc => {
-        const haystack = [doc.filename, doc.authors, doc.author, doc.title, doc.methodology, doc.theory]
-            .filter(Boolean)
-            .join(' ')
-            .toLowerCase();
-        return haystack.includes(query);
-    });
-    renderDocumentsTable(filtered);
-}
-
-// Chatbot Logic
-function toggleChat() {
-    const chatWindow = document.getElementById('chat-window');
-    chatWindow.classList.toggle('active');
-}
-
-function appendMessage(sender, text) {
-    const history = document.getElementById('chat-history');
-    const msgDiv = document.createElement('div');
-    msgDiv.className = `message ${sender}`;
-    // simple html format for markdown
-    const formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                              .replace(/\n/g, '<br>');
-    msgDiv.innerHTML = formattedText;
-    history.appendChild(msgDiv);
-    history.scrollTop = history.scrollHeight;
-    return msgDiv;
-}
-
-async function sendMessage() {
-    const input = document.getElementById('chat-input');
-    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
-    const geminiKey = document.getElementById('global-gemini-key').value.trim();
-    const pineconeKey = document.getElementById('global-pinecone-key').value.trim();
-    
-    const text = input.value.trim();
-
-    if (!text) return;
-    if (!geminiKey || !pineconeKey || !backendUrl) {
-        showToast("Vui lòng nhập đủ thông tin trong phần Cài đặt.", "warning");
-        return;
-    }
-    saveConfigToLocal(backendUrl, geminiKey, pineconeKey);
-
-    appendMessage('user', text);
-    input.value = '';
-    
-    // Add loading message
-    const loadingMsg = appendMessage('bot', '<i class="fa-solid fa-circle-notch fa-spin"></i> Đang suy nghĩ...');
-
-    try {
-        const response = await fetch(`${backendUrl}/api/chat`, {
-            method: 'POST',
-            headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ 
-                question: text, 
-                api_key: geminiKey,
-                pinecone_api_key: pineconeKey
-            })
-        });
-        
-        const data = await response.json();
-        
-        // Remove loading
-        loadingMsg.remove();
-        
-        if (response.ok && data.status === 'success') {
-            appendMessage('bot', data.answer);
-        } else {
-            appendMessage('bot', '❌ Lỗi: ' + (data.detail || 'Không xác định'));
-        }
-    } catch (error) {
-        loadingMsg.remove();
-        appendMessage('bot', '❌ Lỗi kết nối mạng.');
-    }
-}
-
-// Initialization
-document.addEventListener('DOMContentLoaded', () => {
-    // Không tự loadDocuments nữa
-    const tbody = document.getElementById('docs-body');
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">Vui lòng nhập API Key trong phần Cài đặt.</td></tr>';
-    
-    // Nạp lại cấu hình từ Local Storage
-    const savedBackend = localStorage.getItem('backend_url');
-    const savedGemini = localStorage.getItem('gemini_key');
-    const savedPinecone = localStorage.getItem('pinecone_key');
-    const savedSecret = localStorage.getItem('backend_secret');
-
-    if (savedBackend) document.getElementById('global-backend-url').value = savedBackend;
-    if (savedGemini) document.getElementById('global-gemini-key').value = savedGemini;
-    if (savedPinecone) document.getElementById('global-pinecone-key').value = savedPinecone;
-    if (savedSecret) document.getElementById('global-backend-secret').value = savedSecret;
+// Lỗi JS thông thường (bao gồm lỗi khi app.js chạy). Kèm thêm vài thông tin chẩn
+// đoán (encoding trình duyệt dùng để đọc trang, tổng độ dài HTML thực nhận được
+// so với độ dài mong đợi ~80700 ký tự) để phát hiện nếu nội dung bị cắt/hỏng khi
+// Google phục vụ trang, thứ không thể kiểm tra được từ máy tôi.
+window.addEventListener('error', function (e) {
+var diag = '';
+try {
+diag = ' | encoding=' + document.characterSet +
+' | htmlLen=' + document.documentElement.outerHTML.length +
+' | readyState=' + document.readyState;
+} catch (diagErr) { diag = ' | (không lấy được thông tin chẩn đoán)'; }
+showBanner('⚠️ Lỗi JavaScript: ' + e.message +
+' (dòng ' + e.lineno + ':' + e.colno + ', file: ' + (e.filename || 'inline') + ')' + diag);
 });
-
-function saveConfigToLocal(backendUrl, geminiKey, pineconeKey, backendSecret) {
-    if (backendUrl) localStorage.setItem('backend_url', backendUrl);
-    if (geminiKey) localStorage.setItem('gemini_key', geminiKey);
-    if (pineconeKey) localStorage.setItem('pinecone_key', pineconeKey);
-    if (backendSecret) localStorage.setItem('backend_secret', backendSecret);
-}
-
-// Header dùng chung cho mọi fetch() tới Backend: thêm X-Backend-Secret nếu người dùng
-// đã cấu hình (Backend chỉ kiểm tra header này khi có bật BACKEND_SHARED_SECRET, nên
-// không cấu hình gì thì hành vi vẫn như cũ).
-function getBackendHeaders(extra) {
-    const secret = localStorage.getItem('backend_secret');
-    const headers = Object.assign({ 'ngrok-skip-browser-warning': '69420' }, extra || {});
-    if (secret) headers['X-Backend-Secret'] = secret;
-    return headers;
-}
-
-// Modal & Toast Logic
-function openSettings() {
-    document.getElementById('settings-modal').classList.add('active');
-}
-
-function closeSettings() {
-    document.getElementById('settings-modal').classList.remove('active');
-}
-
-function saveSettings() {
-    const backend = document.getElementById('global-backend-url').value.trim();
-    const gemini = document.getElementById('global-gemini-key').value.trim();
-    const pinecone = document.getElementById('global-pinecone-key').value.trim();
-    const backendSecret = document.getElementById('global-backend-secret').value.trim();
-
-    saveConfigToLocal(backend, gemini, pinecone, backendSecret);
-
-    // Đồng bộ cấu hình sang Google Sheets
-    if (typeof google !== 'undefined' && google.script && google.script.run) {
-        google.script.run.withSuccessHandler(() => {
-            console.log("Synced to Sheets");
-        }).saveConfigToProperties(backend, gemini, pinecone, backendSecret);
-    }
-
-    closeSettings();
-    showToast("Đã lưu cấu hình thành công!", "success");
-}
-
-function showToast(message, type = "success") {
-    const container = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    
-    const icon = type === 'success' ? 'fa-check-circle' : 
-                 type === 'error' ? 'fa-triangle-exclamation' : 'fa-circle-info';
-                 
-    toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${message}</span>`;
-    container.appendChild(toast);
-    
-    setTimeout(() => {
-        toast.style.animation = 'fadeOut 0.3s forwards';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
-}
-
-// Select All Toggle
-function toggleSelectAll() {
-    const selectAll = document.getElementById('select-all').checked;
-    const checkboxes = document.querySelectorAll('.doc-checkbox');
-    checkboxes.forEach(cb => cb.checked = selectAll);
-}
-
-// Get Selected Documents
-function getSelectedDocuments() {
-    const checkboxes = document.querySelectorAll('.doc-checkbox:checked');
-    const docs = [];
-    checkboxes.forEach(cb => {
-        try {
-            docs.push(JSON.parse(cb.value));
-        } catch(e) {}
-    });
-    return docs;
-}
-
-// Export Documents
-async function exportDocs(format) {
-    const docs = getSelectedDocuments();
-    if (docs.length === 0) {
-        showToast("Vui lòng chọn ít nhất 1 tài liệu để tải xuống.", "warning");
-        return;
-    }
-    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
-    if (!backendUrl) return showToast("Vui lòng nhập Backend URL trong phần Cài đặt", "warning");
-
-    try {
-        showToast(`Đang tải file ${format.toUpperCase()}...`, "warning");
-        const response = await fetch(`${backendUrl}/api/export`, {
-            method: 'POST',
-            headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ format: format, documents: docs })
-        });
-        
-        if (!response.ok) throw new Error("Lỗi tải file");
-        
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `exported_documents.${format}`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-    } catch (e) {
-        showToast("Lỗi: " + e.message, "error");
-    }
-}
-
-// Export RIS (Zotero)
-async function exportRis() {
-    const docs = getSelectedDocuments();
-    if (docs.length === 0) {
-        showToast("Vui lòng chọn ít nhất 1 tài liệu để tải xuống.", "warning");
-        return;
-    }
-    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
-    if (!backendUrl) return showToast("Vui lòng nhập Backend URL trong phần Cài đặt", "warning");
-
-    let risContent = "";
-    showToast(`Đang tải file RIS...`, "warning");
-    for (const doc of docs) {
-        const res = await fetch(`${backendUrl}/api/export-ris`, {
-            method: 'POST',
-            headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({
-                authors: doc.authors || doc.author || "Unknown",
-                year: doc.year || "",
-                title: doc.title || doc.filename || "Unknown",
-                journal: doc.journal || "",
-                volume: doc.volume || "",
-                issue: doc.issue || "",
-                pages: doc.pages || "",
-                doi: doc.doi || ""
-            })
-        });
-        const data = await res.json();
-        if (data.status === 'success') {
-            risContent += data.ris + "\n";
-        }
-    }
-
-    if (risContent) {
-        const blob = new Blob([risContent], { type: 'application/x-research-info-systems' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = "citations.ris";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-    }
-}
-
-// Upload Handling
-function handleFileSelect(event) {
-    const files = event.target.files;
-    if (files.length > 0) uploadFile(files[0]);
-}
-
-function handleDrop(event) {
-    event.preventDefault();
-    const files = event.dataTransfer.files;
-    if (files.length > 0) {
-        if (files[0].type === "application/pdf") {
-            uploadFile(files[0]);
-        } else {
-            showToast("Vui lòng chỉ tải lên file PDF.", "error");
-        }
-    }
-}
-
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function uploadFile(file) {
-    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
-    const geminiKey = document.getElementById('global-gemini-key').value.trim();
-    const pineconeKey = document.getElementById('global-pinecone-key').value.trim();
-
-    if (!backendUrl || !geminiKey || !pineconeKey) {
-        showToast("Vui lòng nhập đủ thông tin trong phần Cài đặt!", "warning");
-        return;
-    }
-    saveConfigToLocal(backendUrl, geminiKey, pineconeKey);
-
-    const statusDiv = document.getElementById('upload-status');
-    statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang tải lên ${file.name}...`;
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("api_key", geminiKey);
-    formData.append("pinecone_api_key", pineconeKey);
-
-    // Gửi job rồi hỏi lại định kỳ thay vì giữ 1 request duy nhất chờ suốt quá trình
-    // Gemini phân tích + lưu Pinecone (có thể mất vài phút và dễ bị timeout ở tầng hosting).
-    try {
-        const submitResponse = await fetch(`${backendUrl}/api/jobs/analyze-pdf`, {
-            method: 'POST',
-            headers: getBackendHeaders(),
-            body: formData
-        });
-
-        if (!submitResponse.ok) {
-            const data = await submitResponse.json().catch(() => ({}));
-            statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi: ${data.detail || "Không thể gửi file"}`;
-            return;
-        }
-
-        const { job_id } = await submitResponse.json();
-        statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang phân tích ${file.name} (có thể mất vài phút)...`;
-
-        const maxAttempts = 120; // tối đa ~10 phút (poll mỗi 5s)
-        for (let attempt = 0; attempt < maxAttempts; attempt++) {
-            await sleep(5000);
-
-            const pollResponse = await fetch(`${backendUrl}/api/jobs/${job_id}`, {
-                headers: getBackendHeaders()
-            });
-
-            if (pollResponse.status === 404) {
-                statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Job đã mất (Backend có thể vừa khởi động lại). Vui lòng thử lại.`;
-                return;
-            }
-
-            const job = await pollResponse.json();
-            if (job.status === 'success') {
-                statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #10b981;"></i> Đã phân tích xong "${job.data?.title || file.name}"!`;
-                showToast("Phân tích thành công! Xem kết quả ở tab Kho Dữ Liệu.", "success");
-                loadDocuments();
-                return;
-            }
-            if (job.status === 'error') {
-                statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi: ${job.error || "Không thể xử lý"}`;
-                return;
-            }
-            // status === 'pending' -> tiếp tục vòng lặp
-        }
-
-        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Quá thời gian chờ. Việc phân tích vẫn có thể đang chạy ở Backend, hãy kiểm tra lại tab Kho Dữ Liệu sau ít phút.`;
-    } catch (e) {
-        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi kết nối: ${e.message}`;
-    }
-}
-
-async function processNotebookLMWeb() {
-    const text = document.getElementById('notebooklm-input').value.trim();
-    const geminiKey = document.getElementById('global-gemini-key').value.trim();
-    const statusDiv = document.getElementById('notebooklm-status');
-
-    if (!text) {
-        showToast("Vui lòng dán văn bản từ NotebookLM", "warning");
-        return;
-    }
-    if (!geminiKey) {
-        showToast("Vui lòng nhập Gemini API Key trong phần Cài đặt ở góc phải trên cùng", "error");
-        return;
-    }
-    
-    statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang gọi trực tiếp Google Gemini từ trình duyệt (Siêu tốc)...`;
-    
-    const prompt = `Bạn là một trợ lý nghiên cứu học thuật chuyên nghiệp. Hãy đọc kỹ tài liệu này và trích xuất thông tin theo đúng cấu trúc dưới đây bằng Tiếng Việt (trừ những chỗ có yêu cầu dùng Tiếng Anh). 
-
-YÊU CẦU BẮT BUỘC (QUAN TRỌNG NHẤT): 
-Đối với mọi thông tin bạn trích xuất, bạn PHẢI đính kèm vị trí chính xác của thông tin đó trong ngoặc đơn ở cuối mỗi câu hoặc mỗi đoạn.
-- Nếu tài liệu có số trang: Ghi rõ số trang (VD: tr. 15, tr. 20-22). TUYỆT ĐỐI dùng chữ "tr." thay cho chữ "p.".
-- Nếu tài liệu không có số trang (HTML/Web): Ghi rõ tên Mục/Tiêu đề phần (VD: Mục Methodology, Đoạn 3 phần Discussion).
-Tuyệt đối không tự bịa thông tin, nếu tài liệu không có hãy ghi "Không đề cập".
-
-VĂN BẢN TRÍCH XUẤT TỪ NOTEBOOKLM:
----------------------
-${text}
----------------------
-
-Hãy điền thông tin vào định dạng JSON dưới đây. Nếu thông tin nào không có trong văn bản, hãy để trống "" hoặc [] nhưng KHÔNG được tự bịa ra.
-{
-  "authors": "Tác giả",
-  "year": "Năm xuất bản",
-  "authorYear": "Tên tác giả và năm xuất bản (VD: Smith et al., 2023)",
-  "title": "Tựa đề bài báo (Giữ nguyên Tiếng Anh)",
-  "journal": "Tên tạp chí/Hội nghị",
-  "apa7": "Trích dẫn chuẩn xác theo APA 7",
-  "theory": "Tóm tắt ngắn gọn lý thuyết nền tảng. BẮT BUỘC ghi rõ trang/phần",
-  "methodology": "Định lượng, định tính, hay hỗn hợp? Các công cụ phân tích là gì? BẮT BUỘC ghi rõ trang/phần",
-  "sampleSize": "Mô tả chi tiết số lượng, đối tượng, cách thức lấy mẫu. BẮT BUỘC ghi rõ trang/phần",
-  "keyFindings": "Liệt kê các kết quả quan trọng nhất, kèm số liệu thống kê nếu có. Mỗi kết quả BẮT BUỘC ghi rõ trang/phần",
-  "researchGap": "Bài báo này lấp đầy khoảng trống nào của các nghiên cứu đi trước? BẮT BUỘC ghi rõ trang/phần",
-  "limitations": "Tác giả tự nhận định những hạn chế nào? BẮT BUỘC ghi rõ trang/phần",
-  "detailedFindings": [
-    {
-      "content": "Nội dung phát hiện chuyên sâu... (Copy NGUYÊN VĂN từ văn bản nếu có)",
-      "location": "Trang X / Phần Y"
-    },
-    {
-      "content": "Nội dung phát hiện chuyên sâu số 2...",
-      "location": "Trang Z / Phần W"
-    }
-  ],
-  "originalQuote": "Copy NGUYÊN VĂN Tiếng Anh một câu/đoạn xuất sắc nhất. Ghi chính xác số trang/phần",
-  "translatedQuote": "Bản dịch câu trên sang Tiếng Việt mang văn phong học thuật"
-}
-LƯU Ý: "detailedFindings" liệt kê tối đa 8 phát hiện quan trọng nhất (không cần liệt kê hết).`;
-
-    // "thinkingLevel: low" giúp Gemini trả lời nhanh hơn đáng kể cho tác vụ trích xuất dữ liệu
-    // có cấu trúc như thế này (không cần suy luận nhiều bước).
-    const payload = {
-        contents: [{
-            parts: [{ text: prompt }]
-        }],
-        generationConfig: {
-            responseMimeType: "application/json",
-            thinkingConfig: { thinkingLevel: "low" }
-        }
-    };
-
-    try {
-        let response;
-        let data;
-        let retries = 6;
-        let backoff = 3000;
-        
-        while (retries > 0) {
-            response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${geminiKey}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            });
-
-            data = await response.json();
-
-            if (response.ok) {
-                break; // Success
-            } else if (response.status === 503 || response.status === 429) {
-                retries--;
-                if (retries === 0) throw new Error(data.error?.message || "Lỗi không xác định từ Gemini API.");
-                
-                statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Server Gemini quá tải (503). Đang tự động thử lại lần thứ ${7-retries}...`;
-                await new Promise(r => setTimeout(r, backoff));
-                backoff *= 2;
-            } else {
-                throw new Error(data.error?.message || "Lỗi không xác định từ Gemini API.");
-            }
-        }
-
-        if (!data.candidates || data.candidates.length === 0) {
-            throw new Error("Không có dữ liệu trả về từ Gemini. Có thể do chính sách an toàn (Safety Settings).");
-        }
-
-        const rawContent = data.candidates[0].content?.parts?.[0]?.text;
-        if (!rawContent) {
-            throw new Error("Dữ liệu trả về bị rỗng.");
-        }
-
-        let result;
-        try {
-            result = JSON.parse(rawContent);
-        } catch(e) {
-            const cleaned = rawContent.replace(/```json/g, "").replace(/```/g, "").trim();
-            try {
-                result = JSON.parse(cleaned);
-            } catch (e2) {
-                throw new Error(`Không thể parse JSON từ phản hồi: ${cleaned.substring(0, 100)}...`);
-            }
-        }
-
-        if (Array.isArray(result) && result.length > 0) {
-            result = result[0];
-        }
-
-        statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang ghi dữ liệu vào Sheet...`;
-        
-        if (typeof google === 'undefined' || !google.script || !google.script.run) {
-            statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b;"></i> Cảnh báo: google.script.run không khả dụng (bạn đang chạy file HTML trực tiếp thay vì trên Apps Script). Không thể lưu.`;
-            return;
-        }
-
-        google.script.run
-            .withSuccessHandler(function(res) {
-                statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #10b981;"></i> Trích xuất và lưu thành công! Bảng tính đã được cập nhật.`;
-                document.getElementById('notebooklm-input').value = ""; // Clear input
-                showToast("Đã lưu thành công vào Sheet!", "success");
-            })
-            .withFailureHandler(function(error) {
-                statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi ghi vào Sheet: ${error.message}`;
-                showToast("Lỗi xử lý. Vui lòng xem thông báo bên dưới nút bấm.", "error");
-            })
-            .appendNotebookLMRow(result);
-
-    } catch (error) {
-        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi: ${error.message}`;
-        showToast("Lỗi xử lý. Vui lòng xem thông báo bên dưới nút bấm.", "error");
-    }
-}
-
-// =================================================================
-// 📄 BÁO CÁO (dùng chung cho Literature Review & So sánh Khung Tin tức)
-// =================================================================
-let currentReportText = "";
-let currentReportFilename = "report.md";
-
-function openReportModal(title, text, filename) {
-    currentReportText = text;
-    currentReportFilename = filename || "report.md";
-    document.getElementById('report-modal-title').textContent = title;
-    document.getElementById('report-modal-body').textContent = text;
-    document.getElementById('report-modal').classList.add('active');
-}
-
-function closeReportModal() {
-    document.getElementById('report-modal').classList.remove('active');
-}
-
-function downloadReportModal() {
-    const blob = new Blob([currentReportText], { type: 'text/markdown' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = currentReportFilename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-}
-
-// =================================================================
-// 🧠 TỔNG HỢP LITERATURE REVIEW (MATRIX SYNTHESIS)
-// =================================================================
-async function synthesizeLiteratureReview() {
-    const docs = getSelectedDocuments();
-    if (docs.length === 0) {
-        showToast("Vui lòng chọn ít nhất 1 tài liệu để tổng hợp.", "warning");
-        return;
-    }
-    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
-    const geminiKey = document.getElementById('global-gemini-key').value.trim();
-    if (!backendUrl || !geminiKey) {
-        showToast("Vui lòng nhập đủ Backend URL và Gemini Key trong Cài đặt.", "warning");
-        return;
-    }
-
-    const documents = docs.map(doc => ({
-        "Title/Author": (doc.filename || doc.title || "Unknown") + " - " + (doc.authors || doc.author || ""),
-        "Theory": doc.theory || "",
-        "Methodology": doc.methodology || "",
-        "Key Findings": (doc.detailedFindings || []).map(f => f.content).join("; "),
-    }));
-
-    showToast(`Đang tổng hợp ${documents.length} tài liệu...`, "warning");
-
-    try {
-        const response = await fetch(`${backendUrl}/api/synthesis`, {
-            method: 'POST',
-            headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ api_key: geminiKey, documents: documents })
-        });
-        const data = await response.json();
-        if (!response.ok || data.status !== 'success') {
-            throw new Error(data.detail || "Không thể tổng hợp.");
-        }
-        openReportModal("Literature Review Synthesis", data.report, "literature_review.md");
-        showToast("Tổng hợp thành công!", "success");
-    } catch (e) {
-        showToast("Lỗi: " + e.message, "error");
-    }
-}
-
-// =================================================================
-// 📰 PHÂN TÍCH KHUNG TIN TỨC + SO SÁNH ĐA NGUỒN
-// =================================================================
-let newsCompareMode = false;
-
-function toggleNewsCompare() {
-    newsCompareMode = !newsCompareMode;
-    document.getElementById('news-compare-blocks').classList.toggle('hidden', !newsCompareMode);
-    document.getElementById('news-compare-toggle').textContent = newsCompareMode
-        ? '- Ẩn bài báo so sánh'
-        : '+ So sánh với bài báo khác';
-}
-
-function collectNewsArticles() {
-    const articles = [];
-    for (let i = 1; i <= 3; i++) {
-        const text = document.getElementById('news-text-' + i).value.trim();
-        if (!text) continue;
-        articles.push({
-            source: document.getElementById('news-source-' + i).value.trim(),
-            date: document.getElementById('news-date-' + i).value.trim(),
-            text: text
-        });
-    }
-    return articles;
-}
-
-async function submitNewsAnalysis() {
-    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
-    const geminiKey = document.getElementById('global-gemini-key').value.trim();
-    const statusDiv = document.getElementById('news-status');
-    const resultDiv = document.getElementById('news-result');
-
-    if (!backendUrl || !geminiKey) {
-        showToast("Vui lòng nhập đủ Backend URL và Gemini Key trong Cài đặt.", "warning");
-        return;
-    }
-    const articles = collectNewsArticles();
-    if (articles.length === 0) {
-        showToast("Vui lòng dán ít nhất 1 bài báo.", "warning");
-        return;
-    }
-
-    resultDiv.classList.add('hidden');
-    statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang phân tích...`;
-
-    try {
-        if (articles.length === 1) {
-            const response = await fetch(`${backendUrl}/api/analyze-news`, {
-                method: 'POST',
-                headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
-                body: JSON.stringify({
-                    api_key: geminiKey, text: articles[0].text,
-                    source_name: articles[0].source, published_date: articles[0].date
-                })
-            });
-            const data = await response.json();
-            if (!response.ok || data.status !== 'success') throw new Error(data.detail || "Lỗi không xác định.");
-
-            const r = data.data;
-            const citedSources = Array.isArray(r.cited_sources) ? r.cited_sources.join(", ") : (r.cited_sources || "");
-            resultDiv.innerHTML = `
-                <h4 class="font-serif text-lg font-semibold text-slate-900 mb-4">Kết quả phân tích: ${articles[0].source || "Không rõ nguồn"}</h4>
-                <div class="grid grid-cols-2 gap-4 text-sm">
-                    <div><span class="text-slate-400 font-medium block mb-1">Khung chủ đạo</span>${r.dominant_frame || "N/A"}</div>
-                    <div><span class="text-slate-400 font-medium block mb-1">Giọng điệu</span>${r.tone || "N/A"}</div>
-                    <div><span class="text-slate-400 font-medium block mb-1">Nguồn trích dẫn</span>${citedSources || "N/A"}</div>
-                    <div><span class="text-slate-400 font-medium block mb-1">Dấu hiệu thiên kiến</span>${r.bias_indicators || "N/A"}</div>
-                    <div class="col-span-2"><span class="text-slate-400 font-medium block mb-1">Tóm tắt</span>${r.summary || "N/A"}</div>
-                    <div class="col-span-2"><span class="text-slate-400 font-medium block mb-1">Ghi chú lý thuyết</span>${r.theory_notes || "N/A"}</div>
-                </div>`;
-            resultDiv.classList.remove('hidden');
-            statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #059669;"></i> Phân tích thành công!`;
-        } else {
-            const response = await fetch(`${backendUrl}/api/compare-news`, {
-                method: 'POST',
-                headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
-                body: JSON.stringify({
-                    api_key: geminiKey,
-                    articles: articles.map(a => ({ source: a.source || "Không rõ", text: a.text }))
-                })
-            });
-            const data = await response.json();
-            if (!response.ok || data.status !== 'success') throw new Error(data.detail || "Lỗi không xác định.");
-
-            statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #059669;"></i> So sánh thành công!`;
-            openReportModal("So sánh Khung Tin tức", data.report, "news_comparison.md");
-        }
-        showToast("Hoàn thành!", "success");
-        loadNewsHistory();
-    } catch (e) {
-        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #dc2626;"></i> Lỗi: ${e.message}`;
-        showToast("Lỗi: " + e.message, "error");
-    }
-}
-
-async function loadNewsHistory() {
-    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
-    const historyDiv = document.getElementById('news-history');
-    if (!backendUrl) return;
-
-    try {
-        const response = await fetch(`${backendUrl}/api/news-analyses?limit=20`, { headers: getBackendHeaders() });
-        const data = await response.json();
-        const items = (data.status === 'success') ? data.items : [];
-
-        if (items.length === 0) {
-            historyDiv.innerHTML = '<p class="text-slate-400">Chưa có dữ liệu.</p>';
-            return;
-        }
-        historyDiv.innerHTML = items.map(item => `
-            <div class="border border-slate-100 rounded-lg p-4">
-                <div class="flex justify-between items-start mb-1">
-                    <span class="font-medium text-slate-900">${item.source_name || "Không rõ nguồn"}</span>
-                    <span class="text-xs text-slate-400">${item.published_date || ""}</span>
-                </div>
-                <p class="text-slate-500">${item.dominant_frame || ""}</p>
-            </div>`).join('');
-    } catch (e) {
-        historyDiv.innerHTML = '<p class="text-slate-400">Không tải được lịch sử.</p>';
-    }
-}
-
-// =================================================================
-// 🎙️ MÃ HOÁ PHỎNG VẤN (THEMATIC CODING)
-// =================================================================
-async function submitInterviewCoding() {
-    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
-    const geminiKey = document.getElementById('global-gemini-key').value.trim();
-    const role = document.getElementById('interview-role').value.trim();
-    const transcript = document.getElementById('interview-transcript').value.trim();
-    const statusDiv = document.getElementById('interview-status');
-    const resultDiv = document.getElementById('interview-result');
-
-    if (!backendUrl || !geminiKey) {
-        showToast("Vui lòng nhập đủ Backend URL và Gemini Key trong Cài đặt.", "warning");
-        return;
-    }
-    if (!transcript) {
-        showToast("Vui lòng dán transcript phỏng vấn.", "warning");
-        return;
-    }
-
-    resultDiv.classList.add('hidden');
-    statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang mã hoá...`;
-
-    try {
-        const response = await fetch(`${backendUrl}/api/code-interview`, {
-            method: 'POST',
-            headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ api_key: geminiKey, transcript: transcript, interviewee_role: role })
-        });
-        const data = await response.json();
-        if (!response.ok || data.status !== 'success') throw new Error(data.detail || "Lỗi không xác định.");
-
-        const themes = data.data.themes || [];
-        resultDiv.innerHTML = `<h4 class="font-serif text-lg font-semibold text-slate-900 mb-4">${themes.length} chủ đề đã mã hoá</h4>` +
-            themes.map(t => `
-                <div class="border border-slate-100 rounded-lg p-4 mb-3">
-                    <p class="font-semibold text-accent-700 mb-1">${t.theme || ""}</p>
-                    <p class="text-sm text-slate-600 mb-2">${t.description || ""}</p>
-                    ${(t.supporting_quotes || []).map(q => `<p class="text-sm text-slate-500 italic border-l-2 border-slate-200 pl-3 mb-1">"${q}"</p>`).join('')}
-                    <p class="text-xs text-slate-400 mt-2">${t.prevalence_note || ""}</p>
-                </div>`).join('');
-        resultDiv.classList.remove('hidden');
-
-        statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #059669;"></i> Mã hoá thành công!`;
-        showToast(`Đã mã hoá ${themes.length} chủ đề!`, "success");
-        loadInterviewHistory();
-    } catch (e) {
-        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #dc2626;"></i> Lỗi: ${e.message}`;
-        showToast("Lỗi: " + e.message, "error");
-    }
-}
-
-async function loadInterviewHistory() {
-    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
-    const historyDiv = document.getElementById('interview-history');
-    if (!backendUrl) return;
-
-    try {
-        const response = await fetch(`${backendUrl}/api/interview-codings?limit=20`, { headers: getBackendHeaders() });
-        const data = await response.json();
-        const items = (data.status === 'success') ? data.items : [];
-
-        if (items.length === 0) {
-            historyDiv.innerHTML = '<p class="text-slate-400">Chưa có dữ liệu.</p>';
-            return;
-        }
-        historyDiv.innerHTML = items.map(item => `
-            <div class="border border-slate-100 rounded-lg p-4">
-                <div class="flex justify-between items-start mb-1">
-                    <span class="font-medium text-slate-900">${item.interviewee_role || "Không rõ vai trò"}</span>
-                    <span class="text-xs text-slate-400">${(item.themes || []).length} chủ đề</span>
-                </div>
-                <p class="text-slate-500">${item.overall_summary || ""}</p>
-            </div>`).join('');
-    } catch (e) {
-        historyDiv.innerHTML = '<p class="text-slate-400">Không tải được lịch sử.</p>';
-    }
-}
-
-// =================================================================
-// 📊 ĐỘ TIN CẬY GIỮA 2 NGƯỜI MÃ HOÁ (COHEN'S KAPPA)
-// =================================================================
-// Công thức chuẩn: κ = (P_observed - P_expected) / (1 - P_expected)
-// Y hệt hàm computeCohenKappa() trong Mã.js (đã verify bằng ví dụ tính tay, kỳ vọng
-// kappa=0.6) - port nguyên logic để đảm bảo 2 nơi cho cùng 1 kết quả.
-function computeCohenKappa(codesA, codesB) {
-    const n = codesA.length;
-    let agreeCount = 0;
-    const disagreements = [];
-    const countsA = {};
-    const countsB = {};
-    const allLabels = new Set();
-
-    for (let i = 0; i < n; i++) {
-        const a = codesA[i];
-        const b = codesB[i];
-        allLabels.add(a);
-        allLabels.add(b);
-        countsA[a] = (countsA[a] || 0) + 1;
-        countsB[b] = (countsB[b] || 0) + 1;
-        if (a === b) {
-            agreeCount++;
-        } else {
-            disagreements.push({ index: i, a: a, b: b });
-        }
-    }
-
-    const observedAgreement = agreeCount / n;
-
-    let expectedAgreement = 0;
-    allLabels.forEach(label => {
-        const pA = (countsA[label] || 0) / n;
-        const pB = (countsB[label] || 0) / n;
-        expectedAgreement += pA * pB;
-    });
-
-    const kappa = expectedAgreement >= 1
-        ? 1
-        : (observedAgreement - expectedAgreement) / (1 - expectedAgreement);
-
-    return { observedAgreement, expectedAgreement, kappa, disagreements };
-}
-
-function computeKappaWeb() {
-    const linesA = document.getElementById('kappa-coder-a').value.split('\n').map(s => s.trim()).filter(s => s.length > 0);
-    const linesB = document.getElementById('kappa-coder-b').value.split('\n').map(s => s.trim()).filter(s => s.length > 0);
-    const resultDiv = document.getElementById('kappa-result');
-
-    if (linesA.length === 0 || linesB.length === 0) {
-        showToast("Vui lòng nhập mã cho cả 2 người mã hoá.", "warning");
-        return;
-    }
-    if (linesA.length !== linesB.length) {
-        showToast(`Số dòng không khớp: Coder A có ${linesA.length} dòng, Coder B có ${linesB.length} dòng.`, "error");
-        return;
-    }
-
-    const result = computeCohenKappa(linesA, linesB);
-
-    let interpretation;
-    if (result.kappa < 0) interpretation = "Kém (Poor)";
-    else if (result.kappa <= 0.20) interpretation = "Nhẹ (Slight)";
-    else if (result.kappa <= 0.40) interpretation = "Vừa phải (Fair)";
-    else if (result.kappa <= 0.60) interpretation = "Trung bình (Moderate)";
-    else if (result.kappa <= 0.80) interpretation = "Đáng kể (Substantial)";
-    else interpretation = "Gần như hoàn hảo (Almost Perfect)";
-
-    const disagreementsHtml = result.disagreements.length > 0
-        ? result.disagreements.slice(0, 15).map(d => `<div class="text-sm text-slate-500 py-1 border-b border-slate-50">Dòng ${d.index + 1}: <span class="text-red-500">"${d.a}"</span> ≠ <span class="text-red-500">"${d.b}"</span></div>`).join('')
-        : '<p class="text-emerald-600 text-sm">✅ Không có dòng nào bất đồng.</p>';
-
-    resultDiv.innerHTML = `
-        <h4 class="font-serif text-lg font-semibold text-slate-900 mb-4">Kết quả (${linesA.length} item)</h4>
-        <div class="grid grid-cols-3 gap-4 mb-6">
-            <div class="bg-slate-50 rounded-lg p-4 text-center">
-                <p class="text-2xl font-bold text-slate-900">${(result.observedAgreement * 100).toFixed(1)}%</p>
-                <p class="text-xs text-slate-500 mt-1">Tỷ lệ đồng thuận</p>
-            </div>
-            <div class="bg-slate-50 rounded-lg p-4 text-center">
-                <p class="text-2xl font-bold text-accent-600">${result.kappa.toFixed(3)}</p>
-                <p class="text-xs text-slate-500 mt-1">Cohen's Kappa</p>
-            </div>
-            <div class="bg-slate-50 rounded-lg p-4 text-center">
-                <p class="text-sm font-bold text-slate-900 mt-1.5">${interpretation}</p>
-                <p class="text-xs text-slate-500 mt-1">Thang Landis &amp; Koch</p>
-            </div>
-        </div>
-        <h5 class="font-semibold text-slate-700 mb-2 text-sm">${result.disagreements.length} dòng bất đồng${result.disagreements.length > 15 ? ' (hiển thị 15 dòng đầu)' : ''}</h5>
-        ${disagreementsHtml}
-    `;
-    resultDiv.classList.remove('hidden');
-}
-
+// Promise bị reject nhưng không ai .catch()
+window.addEventListener('unhandledrejection', function (e) {
+showBanner('⚠️ Promise lỗi: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+});
+// Trình duyệt chặn theo Content-Security-Policy (vd chặn onclick inline) - đây
+// không phải "error" JS thông thường nên cần bắt riêng.
+document.addEventListener('securitypolicyviolation', function (e) {
+showBanner('⚠️ Bị chặn bởi Content-Security-Policy: ' + e.violatedDirective +
+' (nguồn bị chặn: ' + e.blockedURI + ')');
+});
+})();
 </script>
-
-    <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        if (typeof tailwind !== 'undefined') {
-            tailwind.config = {
-                theme: {
-                    extend: {
-                        fontFamily: {
-                            sans: ['Inter', 'sans-serif'],
-                            serif: ['"Source Serif 4"', 'serif'],
-                        },
-                        colors: {
-                            accent: {
-                                50: '#eef2ff', 100: '#e0e7ff', 400: '#818cf8',
-                                500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-    <style>
-        body { background-color: #f8fafc; color: #0f172a; }
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-        .field-input {
-            background: #fff; border: 1px solid #e2e8f0; color: #0f172a;
-            transition: border-color 0.15s, box-shadow 0.15s;
-        }
-        .field-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12); }
-        .field-input::placeholder { color: #94a3b8; }
-
-        .view-section { display: none; animation: fadeIn 0.25s ease; }
-        .view-section.active { display: flex; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-
-        .nav-item { border-left: 3px solid transparent; }
-        .nav-item.active { border-left-color: #4f46e5; background: #eef2ff; color: #4338ca; }
-        .nav-item.active i { color: #4f46e5; }
-
-        .modal-overlay {
-            display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.4);
-            z-index: 1000; align-items: center; justify-content: center; animation: fadeIn 0.15s ease;
-        }
-        .modal-overlay.active { display: flex; }
-
-        #toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
-        .toast { padding: 12px 22px; border-radius: 10px; color: white; font-weight: 500; font-size: 14px; box-shadow: 0 8px 20px rgba(0,0,0,0.15); display: flex; align-items: center; gap: 10px; animation: slideUp 0.25s ease forwards; }
-        .toast-success { background: #059669; }
-        .toast-error { background: #dc2626; }
-        .toast-warning { background: #d97706; }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-
-        .theme-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; }
-    </style>
+<script>
+function switchTab(e,t){document.querySelectorAll(".nav-item").forEach(e=>e.classList.remove("active")),t&&t.classList.add("active");document.getElementById("page-title").innerText={documents:"Kho Dữ Liệu",upload:"Tải PDF Lên",notebooklm:"Dán từ NotebookLM",graph:"Knowledge Graph",timeline:"Timeline Nghiên cứu",news:"Phân tích Khung Tin tức",interview:"Mã hoá Phỏng vấn",kappa:"Độ tin cậy Mã hoá"}[e]||"Dashboard",document.querySelectorAll(".view-section").forEach(e=>e.classList.remove("active")),document.getElementById("view-"+e).classList.add("active");const n=document.getElementById("global-backend-url").value.trim().replace(/\/$/,"");if("graph"===e){const e=document.getElementById("graph-frame");e.src=e.src}else if("timeline"===e){const e=document.getElementById("timeline-frame");n&&(e.src=`${n}/api/timeline`)}else"news"===e?loadNewsHistory():"interview"===e&&loadInterviewHistory()}let allLoadedDocuments=[];async function loadDocuments(){const e=document.getElementById("global-backend-url").value.trim().replace(/\/$/,""),t=document.getElementById("global-gemini-key").value.trim(),n=document.getElementById("global-pinecone-key").value.trim(),o=document.getElementById("docs-body");if(t&&n&&e){saveConfigToLocal(e,t,n);try{o.innerHTML='<tr><td colspan="5" style="text-align:center;">Đang tải dữ liệu...</td></tr>';const a=new URLSearchParams({api_key:t,pinecone_api_key:n}),i=await fetch(`${e}/api/documents?`+a.toString(),{headers:getBackendHeaders()}),s=await i.json();allLoadedDocuments="success"===s.status?s.documents:[];const c=document.getElementById("doc-search");c&&(c.value=""),renderDocumentsTable(allLoadedDocuments)}catch(e){console.error("Error fetching docs:",e),document.getElementById("docs-body").innerHTML='<tr><td colspan="6" class="px-6 py-12 text-center text-red-400"><i class="fa-solid fa-triangle-exclamation mr-2"></i> Lỗi kết nối Backend.</td></tr>'}}else o.innerHTML='<tr><td colspan="5" style="text-align:center; color: #f87171;">Vui lòng nhập đủ Backend URL, Gemini Key và Pinecone Key ở góc trên phải rồi nhấn Load.</td></tr>'}const DOCS_PAGE_SIZE=20;let currentDocsView=[],currentDocsPage=1;function renderDocumentsTable(e){currentDocsView=e||[],currentDocsPage=1,renderCurrentDocsPage()}function renderCurrentDocsPage(){const e=document.getElementById("docs-body"),t=document.getElementById("docs-pagination"),n=currentDocsView.length;if(0===n){const n=0===allLoadedDocuments.length?"Chưa có tài liệu nào trong cơ sở dữ liệu.":"Không tìm thấy tài liệu nào khớp với từ khoá tìm kiếm.";return e.innerHTML=`<tr><td colspan="6" class="px-6 py-12 text-center text-slate-400">${n}</td></tr>`,void t.classList.add("hidden")}const o=Math.max(1,Math.ceil(n/20));currentDocsPage=Math.min(Math.max(1,currentDocsPage),o);const a=20*(currentDocsPage-1),i=currentDocsView.slice(a,a+20);e.innerHTML="",i.forEach(t=>{const n=document.createElement("tr");n.className="hover:bg-white/5 transition-colors group",n.innerHTML=`\n            <td class="px-6 py-4 border-b border-white/10 text-center">\n                <input type="checkbox" class="doc-checkbox w-4 h-4 rounded border-slate-600 bg-dark-700 accent-brand-500 cursor-pointer" value='${JSON.stringify(t).replace(/'/g,"&apos;")}'>\n            </td>\n            <td class="px-6 py-4 border-b border-white/10">\n                <div class="flex items-center gap-3">\n                    <div class="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">\n                        <i class="fa-solid fa-file-pdf text-red-400"></i>\n                    </div>\n                    <span class="font-medium text-slate-200 truncate max-w-[200px] block" title="${t.filename||"Unknown"}">${t.filename||"Unknown"}</span>\n                </div>\n            </td>\n            <td class="px-6 py-4 border-b border-white/10 text-slate-300">${t.authors||t.author||"Unknown"}</td>\n            <td class="px-6 py-4 border-b border-white/10 text-slate-300 truncate max-w-xs" title="${t.title||"Unknown"}">${t.title||"Unknown"}</td>\n            <td class="px-6 py-4 border-b border-white/10 text-slate-300 truncate max-w-[150px]" title="${t.methodology||"Unknown"}">${t.methodology||"Unknown"}</td>\n            <td class="px-6 py-4 border-b border-white/10 text-center">\n                <button class="px-4 py-1.5 rounded-lg bg-brand-500/20 text-brand-400 hover:bg-brand-500 hover:text-white text-sm font-medium transition-all opacity-70 group-hover:opacity-100 border border-brand-500/30" onclick="viewDoc('${t.id}')">Xem</button>\n            </td>\n        `,e.appendChild(n)}),document.getElementById("docs-pagination-info").textContent=`Hiển thị ${a+1}-${Math.min(a+20,n)} / ${n} tài liệu (trang ${currentDocsPage}/${o})`,document.getElementById("docs-prev-page").disabled=currentDocsPage<=1,document.getElementById("docs-next-page").disabled=currentDocsPage>=o,t.classList.remove("hidden")}function changeDocPage(e){currentDocsPage+=e,renderCurrentDocsPage()}function filterDocuments(){const e=document.getElementById("doc-search").value.trim().toLowerCase();if(!e)return void renderDocumentsTable(allLoadedDocuments);renderDocumentsTable(allLoadedDocuments.filter(t=>[t.filename,t.authors,t.author,t.title,t.methodology,t.theory].filter(Boolean).join(" ").toLowerCase().includes(e)))}function toggleChat(){document.getElementById("chat-window").classList.toggle("active")}function appendMessage(e,t){const n=document.getElementById("chat-history"),o=document.createElement("div");o.className=`message ${e}`;const a=t.replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>").replace(/\n/g,"<br>");return o.innerHTML=a,n.appendChild(o),n.scrollTop=n.scrollHeight,o}async function sendMessage(){const e=document.getElementById("chat-input"),t=document.getElementById("global-backend-url").value.trim().replace(/\/$/,""),n=document.getElementById("global-gemini-key").value.trim(),o=document.getElementById("global-pinecone-key").value.trim(),a=e.value.trim();if(!a)return;if(!n||!o||!t)return void showToast("Vui lòng nhập đủ thông tin trong phần Cài đặt.","warning");saveConfigToLocal(t,n,o),appendMessage("user",a),e.value="";const i=appendMessage("bot",'<i class="fa-solid fa-circle-notch fa-spin"></i> Đang suy nghĩ...');try{const e=await fetch(`${t}/api/chat`,{method:"POST",headers:getBackendHeaders({"Content-Type":"application/json"}),body:JSON.stringify({question:a,api_key:n,pinecone_api_key:o})}),s=await e.json();i.remove(),e.ok&&"success"===s.status?appendMessage("bot",s.answer):appendMessage("bot","❌ Lỗi: "+(s.detail||"Không xác định"))}catch(e){i.remove(),appendMessage("bot","❌ Lỗi kết nối mạng.")}}function saveConfigToLocal(e,t,n,o){e&&localStorage.setItem("backend_url",e),t&&localStorage.setItem("gemini_key",t),n&&localStorage.setItem("pinecone_key",n),o&&localStorage.setItem("backend_secret",o)}function getBackendHeaders(e){const t=localStorage.getItem("backend_secret"),n=Object.assign({"ngrok-skip-browser-warning":"69420"},e||{});return t&&(n["X-Backend-Secret"]=t),n}function openSettings(){document.getElementById("settings-modal").classList.add("active")}function closeSettings(){document.getElementById("settings-modal").classList.remove("active")}function saveSettings(){const e=document.getElementById("global-backend-url").value.trim(),t=document.getElementById("global-gemini-key").value.trim(),n=document.getElementById("global-pinecone-key").value.trim(),o=document.getElementById("global-backend-secret").value.trim();saveConfigToLocal(e,t,n,o),"undefined"!=typeof google&&google.script&&google.script.run&&google.script.run.withSuccessHandler(()=>{console.log("Synced to Sheets")}).saveConfigToProperties(e,t,n,o),closeSettings(),showToast("Đã lưu cấu hình thành công!","success")}function showToast(e,t="success"){const n=document.getElementById("toast-container"),o=document.createElement("div");o.className=`toast ${t}`;const a="success"===t?"fa-check-circle":"error"===t?"fa-triangle-exclamation":"fa-circle-info";o.innerHTML=`<i class="fa-solid ${a}"></i> <span>${e}</span>`,n.appendChild(o),setTimeout(()=>{o.style.animation="fadeOut 0.3s forwards",setTimeout(()=>o.remove(),300)},3e3)}function toggleSelectAll(){const e=document.getElementById("select-all").checked;document.querySelectorAll(".doc-checkbox").forEach(t=>t.checked=e)}function getSelectedDocuments(){const e=document.querySelectorAll(".doc-checkbox:checked"),t=[];return e.forEach(e=>{try{t.push(JSON.parse(e.value))}catch(e){}}),t}async function exportDocs(e){const t=getSelectedDocuments();if(0===t.length)return void showToast("Vui lòng chọn ít nhất 1 tài liệu để tải xuống.","warning");const n=document.getElementById("global-backend-url").value.trim().replace(/\/$/,"");if(!n)return showToast("Vui lòng nhập Backend URL trong phần Cài đặt","warning");try{showToast(`Đang tải file ${e.toUpperCase()}...`,"warning");const o=await fetch(`${n}/api/export`,{method:"POST",headers:getBackendHeaders({"Content-Type":"application/json"}),body:JSON.stringify({format:e,documents:t})});if(!o.ok)throw new Error("Lỗi tải file");const a=await o.blob(),i=window.URL.createObjectURL(a),s=document.createElement("a");s.href=i,s.download=`exported_documents.${e}`,document.body.appendChild(s),s.click(),s.remove()}catch(e){showToast("Lỗi: "+e.message,"error")}}async function exportRis(){const e=getSelectedDocuments();if(0===e.length)return void showToast("Vui lòng chọn ít nhất 1 tài liệu để tải xuống.","warning");const t=document.getElementById("global-backend-url").value.trim().replace(/\/$/,"");if(!t)return showToast("Vui lòng nhập Backend URL trong phần Cài đặt","warning");let n="";showToast("Đang tải file RIS...","warning");for(const o of e){const e=await fetch(`${t}/api/export-ris`,{method:"POST",headers:getBackendHeaders({"Content-Type":"application/json"}),body:JSON.stringify({authors:o.authors||o.author||"Unknown",year:o.year||"",title:o.title||o.filename||"Unknown",journal:o.journal||"",volume:o.volume||"",issue:o.issue||"",pages:o.pages||"",doi:o.doi||""})}),a=await e.json();"success"===a.status&&(n+=a.ris+"\n")}if(n){const e=new Blob([n],{type:"application/x-research-info-systems"}),t=window.URL.createObjectURL(e),o=document.createElement("a");o.href=t,o.download="citations.ris",document.body.appendChild(o),o.click(),o.remove()}}function handleFileSelect(e){const t=e.target.files;t.length>0&&uploadFile(t[0])}function handleDrop(e){e.preventDefault();const t=e.dataTransfer.files;t.length>0&&("application/pdf"===t[0].type?uploadFile(t[0]):showToast("Vui lòng chỉ tải lên file PDF.","error"))}function sleep(e){return new Promise(t=>setTimeout(t,e))}async function uploadFile(e){const t=document.getElementById("global-backend-url").value.trim().replace(/\/$/,""),n=document.getElementById("global-gemini-key").value.trim(),o=document.getElementById("global-pinecone-key").value.trim();if(!t||!n||!o)return void showToast("Vui lòng nhập đủ thông tin trong phần Cài đặt!","warning");saveConfigToLocal(t,n,o);const a=document.getElementById("upload-status");a.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i> Đang tải lên ${e.name}...`;const i=new FormData;i.append("file",e),i.append("api_key",n),i.append("pinecone_api_key",o);try{const n=await fetch(`${t}/api/jobs/analyze-pdf`,{method:"POST",headers:getBackendHeaders(),body:i});if(!n.ok){const e=await n.json().catch(()=>({}));return void(a.innerHTML=`<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi: ${e.detail||"Không thể gửi file"}`)}const{job_id:o}=await n.json();a.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i> Đang phân tích ${e.name} (có thể mất vài phút)...`;const s=120;for(let n=0;n<s;n++){await sleep(5e3);const n=await fetch(`${t}/api/jobs/${o}`,{headers:getBackendHeaders()});if(404===n.status)return void(a.innerHTML='<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Job đã mất (Backend có thể vừa khởi động lại). Vui lòng thử lại.');const i=await n.json();if("success"===i.status)return a.innerHTML=`<i class="fa-solid fa-check" style="color: #10b981;"></i> Đã phân tích xong "${i.data?.title||e.name}"!`,showToast("Phân tích thành công! Xem kết quả ở tab Kho Dữ Liệu.","success"),void loadDocuments();if("error"===i.status)return void(a.innerHTML=`<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi: ${i.error||"Không thể xử lý"}`)}a.innerHTML='<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Quá thời gian chờ. Việc phân tích vẫn có thể đang chạy ở Backend, hãy kiểm tra lại tab Kho Dữ Liệu sau ít phút.'}catch(e){a.innerHTML=`<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi kết nối: ${e.message}`}}async function processNotebookLMWeb(){const e=document.getElementById("notebooklm-input").value.trim(),t=document.getElementById("global-gemini-key").value.trim(),n=document.getElementById("notebooklm-status");if(!e)return void showToast("Vui lòng dán văn bản từ NotebookLM","warning");if(!t)return void showToast("Vui lòng nhập Gemini API Key trong phần Cài đặt ở góc phải trên cùng","error");n.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Đang gọi trực tiếp Google Gemini từ trình duyệt (Siêu tốc)...';const o={contents:[{parts:[{text:`Bạn là một trợ lý nghiên cứu học thuật chuyên nghiệp. Hãy đọc kỹ tài liệu này và trích xuất thông tin theo đúng cấu trúc dưới đây bằng Tiếng Việt (trừ những chỗ có yêu cầu dùng Tiếng Anh). \n\nYÊU CẦU BẮT BUỘC (QUAN TRỌNG NHẤT): \nĐối với mọi thông tin bạn trích xuất, bạn PHẢI đính kèm vị trí chính xác của thông tin đó trong ngoặc đơn ở cuối mỗi câu hoặc mỗi đoạn.\n- Nếu tài liệu có số trang: Ghi rõ số trang (VD: tr. 15, tr. 20-22). TUYỆT ĐỐI dùng chữ "tr." thay cho chữ "p.".\n- Nếu tài liệu không có số trang (HTML/Web): Ghi rõ tên Mục/Tiêu đề phần (VD: Mục Methodology, Đoạn 3 phần Discussion).\nTuyệt đối không tự bịa thông tin, nếu tài liệu không có hãy ghi "Không đề cập".\n\nVĂN BẢN TRÍCH XUẤT TỪ NOTEBOOKLM:\n---------------------\n${e}\n---------------------\n\nHãy điền thông tin vào định dạng JSON dưới đây. Nếu thông tin nào không có trong văn bản, hãy để trống "" hoặc [] nhưng KHÔNG được tự bịa ra.\n{\n  "authors": "Tác giả",\n  "year": "Năm xuất bản",\n  "authorYear": "Tên tác giả và năm xuất bản (VD: Smith et al., 2023)",\n  "title": "Tựa đề bài báo (Giữ nguyên Tiếng Anh)",\n  "journal": "Tên tạp chí/Hội nghị",\n  "apa7": "Trích dẫn chuẩn xác theo APA 7",\n  "theory": "Tóm tắt ngắn gọn lý thuyết nền tảng. BẮT BUỘC ghi rõ trang/phần",\n  "methodology": "Định lượng, định tính, hay hỗn hợp? Các công cụ phân tích là gì? BẮT BUỘC ghi rõ trang/phần",\n  "sampleSize": "Mô tả chi tiết số lượng, đối tượng, cách thức lấy mẫu. BẮT BUỘC ghi rõ trang/phần",\n  "keyFindings": "Liệt kê các kết quả quan trọng nhất, kèm số liệu thống kê nếu có. Mỗi kết quả BẮT BUỘC ghi rõ trang/phần",\n  "researchGap": "Bài báo này lấp đầy khoảng trống nào của các nghiên cứu đi trước? BẮT BUỘC ghi rõ trang/phần",\n  "limitations": "Tác giả tự nhận định những hạn chế nào? BẮT BUỘC ghi rõ trang/phần",\n  "detailedFindings": [\n    {\n      "content": "Nội dung phát hiện chuyên sâu... (Copy NGUYÊN VĂN từ văn bản nếu có)",\n      "location": "Trang X / Phần Y"\n    },\n    {\n      "content": "Nội dung phát hiện chuyên sâu số 2...",\n      "location": "Trang Z / Phần W"\n    }\n  ],\n  "originalQuote": "Copy NGUYÊN VĂN Tiếng Anh một câu/đoạn xuất sắc nhất. Ghi chính xác số trang/phần",\n  "translatedQuote": "Bản dịch câu trên sang Tiếng Việt mang văn phong học thuật"\n}\nLƯU Ý: "detailedFindings" liệt kê tối đa 8 phát hiện quan trọng nhất (không cần liệt kê hết).`}]}],generationConfig:{responseMimeType:"application/json",thinkingConfig:{thinkingLevel:"low"}}};try{let e,a,i=6,s=3e3;for(;i>0&&(e=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${t}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(o)}),a=await e.json(),!e.ok);){if(503!==e.status&&429!==e.status)throw new Error(a.error?.message||"Lỗi không xác định từ Gemini API.");if(i--,0===i)throw new Error(a.error?.message||"Lỗi không xác định từ Gemini API.");n.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i> Server Gemini quá tải (503). Đang tự động thử lại lần thứ ${7-i}...`,await new Promise(e=>setTimeout(e,s)),s*=2}if(!a.candidates||0===a.candidates.length)throw new Error("Không có dữ liệu trả về từ Gemini. Có thể do chính sách an toàn (Safety Settings).");const c=a.candidates[0].content?.parts?.[0]?.text;if(!c)throw new Error("Dữ liệu trả về bị rỗng.");let r;try{r=JSON.parse(c)}catch(e){const t=c.replace(/```json/g,"").replace(/```/g,"").trim();try{r=JSON.parse(t)}catch(e){throw new Error(`Không thể parse JSON từ phản hồi: ${t.substring(0,100)}...`)}}if(Array.isArray(r)&&r.length>0&&(r=r[0]),n.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Đang ghi dữ liệu vào Sheet...',"undefined"==typeof google||!google.script||!google.script.run)return void(n.innerHTML='<i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b;"></i> Cảnh báo: google.script.run không khả dụng (bạn đang chạy file HTML trực tiếp thay vì trên Apps Script). Không thể lưu.');google.script.run.withSuccessHandler(function(e){n.innerHTML='<i class="fa-solid fa-check" style="color: #10b981;"></i> Trích xuất và lưu thành công! Bảng tính đã được cập nhật.',document.getElementById("notebooklm-input").value="",showToast("Đã lưu thành công vào Sheet!","success")}).withFailureHandler(function(e){n.innerHTML=`<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi ghi vào Sheet: ${e.message}`,showToast("Lỗi xử lý. Vui lòng xem thông báo bên dưới nút bấm.","error")}).appendNotebookLMRow(r)}catch(e){n.innerHTML=`<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi: ${e.message}`,showToast("Lỗi xử lý. Vui lòng xem thông báo bên dưới nút bấm.","error")}}document.addEventListener("DOMContentLoaded",()=>{document.getElementById("docs-body").innerHTML='<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">Vui lòng nhập API Key trong phần Cài đặt.</td></tr>';const e=localStorage.getItem("backend_url"),t=localStorage.getItem("gemini_key"),n=localStorage.getItem("pinecone_key"),o=localStorage.getItem("backend_secret");e&&(document.getElementById("global-backend-url").value=e),t&&(document.getElementById("global-gemini-key").value=t),n&&(document.getElementById("global-pinecone-key").value=n),o&&(document.getElementById("global-backend-secret").value=o)});let currentReportText="",currentReportFilename="report.md";function openReportModal(e,t,n){currentReportText=t,currentReportFilename=n||"report.md",document.getElementById("report-modal-title").textContent=e,document.getElementById("report-modal-body").textContent=t,document.getElementById("report-modal").classList.add("active")}function closeReportModal(){document.getElementById("report-modal").classList.remove("active")}function downloadReportModal(){const e=new Blob([currentReportText],{type:"text/markdown"}),t=window.URL.createObjectURL(e),n=document.createElement("a");n.href=t,n.download=currentReportFilename,document.body.appendChild(n),n.click(),n.remove()}async function synthesizeLiteratureReview(){const e=getSelectedDocuments();if(0===e.length)return void showToast("Vui lòng chọn ít nhất 1 tài liệu để tổng hợp.","warning");const t=document.getElementById("global-backend-url").value.trim().replace(/\/$/,""),n=document.getElementById("global-gemini-key").value.trim();if(!t||!n)return void showToast("Vui lòng nhập đủ Backend URL và Gemini Key trong Cài đặt.","warning");const o=e.map(e=>({"Title/Author":(e.filename||e.title||"Unknown")+" - "+(e.authors||e.author||""),Theory:e.theory||"",Methodology:e.methodology||"","Key Findings":(e.detailedFindings||[]).map(e=>e.content).join("; ")}));showToast(`Đang tổng hợp ${o.length} tài liệu...`,"warning");try{const e=await fetch(`${t}/api/synthesis`,{method:"POST",headers:getBackendHeaders({"Content-Type":"application/json"}),body:JSON.stringify({api_key:n,documents:o})}),a=await e.json();if(!e.ok||"success"!==a.status)throw new Error(a.detail||"Không thể tổng hợp.");openReportModal("Literature Review Synthesis",a.report,"literature_review.md"),showToast("Tổng hợp thành công!","success")}catch(e){showToast("Lỗi: "+e.message,"error")}}let newsCompareMode=!1;function toggleNewsCompare(){newsCompareMode=!newsCompareMode,document.getElementById("news-compare-blocks").classList.toggle("hidden",!newsCompareMode),document.getElementById("news-compare-toggle").textContent=newsCompareMode?"- Ẩn bài báo so sánh":"+ So sánh với bài báo khác"}function collectNewsArticles(){const e=[];for(let t=1;t<=3;t++){const n=document.getElementById("news-text-"+t).value.trim();n&&e.push({source:document.getElementById("news-source-"+t).value.trim(),date:document.getElementById("news-date-"+t).value.trim(),text:n})}return e}async function submitNewsAnalysis(){const e=document.getElementById("global-backend-url").value.trim().replace(/\/$/,""),t=document.getElementById("global-gemini-key").value.trim(),n=document.getElementById("news-status"),o=document.getElementById("news-result");if(!e||!t)return void showToast("Vui lòng nhập đủ Backend URL và Gemini Key trong Cài đặt.","warning");const a=collectNewsArticles();if(0!==a.length){o.classList.add("hidden"),n.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Đang phân tích...';try{if(1===a.length){const i=await fetch(`${e}/api/analyze-news`,{method:"POST",headers:getBackendHeaders({"Content-Type":"application/json"}),body:JSON.stringify({api_key:t,text:a[0].text,source_name:a[0].source,published_date:a[0].date})}),s=await i.json();if(!i.ok||"success"!==s.status)throw new Error(s.detail||"Lỗi không xác định.");const c=s.data,r=Array.isArray(c.cited_sources)?c.cited_sources.join(", "):c.cited_sources||"";o.innerHTML=`\n                <h4 class="font-serif text-lg font-semibold text-slate-900 mb-4">Kết quả phân tích: ${a[0].source||"Không rõ nguồn"}</h4>\n                <div class="grid grid-cols-2 gap-4 text-sm">\n                    <div><span class="text-slate-400 font-medium block mb-1">Khung chủ đạo</span>${c.dominant_frame||"N/A"}</div>\n                    <div><span class="text-slate-400 font-medium block mb-1">Giọng điệu</span>${c.tone||"N/A"}</div>\n                    <div><span class="text-slate-400 font-medium block mb-1">Nguồn trích dẫn</span>${r||"N/A"}</div>\n                    <div><span class="text-slate-400 font-medium block mb-1">Dấu hiệu thiên kiến</span>${c.bias_indicators||"N/A"}</div>\n                    <div class="col-span-2"><span class="text-slate-400 font-medium block mb-1">Tóm tắt</span>${c.summary||"N/A"}</div>\n                    <div class="col-span-2"><span class="text-slate-400 font-medium block mb-1">Ghi chú lý thuyết</span>${c.theory_notes||"N/A"}</div>\n                </div>`,o.classList.remove("hidden"),n.innerHTML='<i class="fa-solid fa-check" style="color: #059669;"></i> Phân tích thành công!'}else{const o=await fetch(`${e}/api/compare-news`,{method:"POST",headers:getBackendHeaders({"Content-Type":"application/json"}),body:JSON.stringify({api_key:t,articles:a.map(e=>({source:e.source||"Không rõ",text:e.text}))})}),i=await o.json();if(!o.ok||"success"!==i.status)throw new Error(i.detail||"Lỗi không xác định.");n.innerHTML='<i class="fa-solid fa-check" style="color: #059669;"></i> So sánh thành công!',openReportModal("So sánh Khung Tin tức",i.report,"news_comparison.md")}showToast("Hoàn thành!","success"),loadNewsHistory()}catch(e){n.innerHTML=`<i class="fa-solid fa-triangle-exclamation" style="color: #dc2626;"></i> Lỗi: ${e.message}`,showToast("Lỗi: "+e.message,"error")}}else showToast("Vui lòng dán ít nhất 1 bài báo.","warning")}async function loadNewsHistory(){const e=document.getElementById("global-backend-url").value.trim().replace(/\/$/,""),t=document.getElementById("news-history");if(e)try{const n=await fetch(`${e}/api/news-analyses?limit=20`,{headers:getBackendHeaders()}),o=await n.json(),a="success"===o.status?o.items:[];if(0===a.length)return void(t.innerHTML='<p class="text-slate-400">Chưa có dữ liệu.</p>');t.innerHTML=a.map(e=>`\n            <div class="border border-slate-100 rounded-lg p-4">\n                <div class="flex justify-between items-start mb-1">\n                    <span class="font-medium text-slate-900">${e.source_name||"Không rõ nguồn"}</span>\n                    <span class="text-xs text-slate-400">${e.published_date||""}</span>\n                </div>\n                <p class="text-slate-500">${e.dominant_frame||""}</p>\n            </div>`).join("")}catch(e){t.innerHTML='<p class="text-slate-400">Không tải được lịch sử.</p>'}}async function submitInterviewCoding(){const e=document.getElementById("global-backend-url").value.trim().replace(/\/$/,""),t=document.getElementById("global-gemini-key").value.trim(),n=document.getElementById("interview-role").value.trim(),o=document.getElementById("interview-transcript").value.trim(),a=document.getElementById("interview-status"),i=document.getElementById("interview-result");if(e&&t)if(o){i.classList.add("hidden"),a.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Đang mã hoá...';try{const s=await fetch(`${e}/api/code-interview`,{method:"POST",headers:getBackendHeaders({"Content-Type":"application/json"}),body:JSON.stringify({api_key:t,transcript:o,interviewee_role:n})}),c=await s.json();if(!s.ok||"success"!==c.status)throw new Error(c.detail||"Lỗi không xác định.");const r=c.data.themes||[];i.innerHTML=`<h4 class="font-serif text-lg font-semibold text-slate-900 mb-4">${r.length} chủ đề đã mã hoá</h4>`+r.map(e=>`\n                <div class="border border-slate-100 rounded-lg p-4 mb-3">\n                    <p class="font-semibold text-accent-700 mb-1">${e.theme||""}</p>\n                    <p class="text-sm text-slate-600 mb-2">${e.description||""}</p>\n                    ${(e.supporting_quotes||[]).map(e=>`<p class="text-sm text-slate-500 italic border-l-2 border-slate-200 pl-3 mb-1">"${e}"</p>`).join("")}\n                    <p class="text-xs text-slate-400 mt-2">${e.prevalence_note||""}</p>\n                </div>`).join(""),i.classList.remove("hidden"),a.innerHTML='<i class="fa-solid fa-check" style="color: #059669;"></i> Mã hoá thành công!',showToast(`Đã mã hoá ${r.length} chủ đề!`,"success"),loadInterviewHistory()}catch(e){a.innerHTML=`<i class="fa-solid fa-triangle-exclamation" style="color: #dc2626;"></i> Lỗi: ${e.message}`,showToast("Lỗi: "+e.message,"error")}}else showToast("Vui lòng dán transcript phỏng vấn.","warning");else showToast("Vui lòng nhập đủ Backend URL và Gemini Key trong Cài đặt.","warning")}async function loadInterviewHistory(){const e=document.getElementById("global-backend-url").value.trim().replace(/\/$/,""),t=document.getElementById("interview-history");if(e)try{const n=await fetch(`${e}/api/interview-codings?limit=20`,{headers:getBackendHeaders()}),o=await n.json(),a="success"===o.status?o.items:[];if(0===a.length)return void(t.innerHTML='<p class="text-slate-400">Chưa có dữ liệu.</p>');t.innerHTML=a.map(e=>`\n            <div class="border border-slate-100 rounded-lg p-4">\n                <div class="flex justify-between items-start mb-1">\n                    <span class="font-medium text-slate-900">${e.interviewee_role||"Không rõ vai trò"}</span>\n                    <span class="text-xs text-slate-400">${(e.themes||[]).length} chủ đề</span>\n                </div>\n                <p class="text-slate-500">${e.overall_summary||""}</p>\n            </div>`).join("")}catch(e){t.innerHTML='<p class="text-slate-400">Không tải được lịch sử.</p>'}}function computeCohenKappa(e,t){const n=e.length;let o=0;const a=[],i={},s={},c=new Set;for(let r=0;r<n;r++){const n=e[r],l=t[r];c.add(n),c.add(l),i[n]=(i[n]||0)+1,s[l]=(s[l]||0)+1,n===l?o++:a.push({index:r,a:n,b:l})}const r=o/n;let l=0;c.forEach(e=>{const t=(i[e]||0)/n,o=(s[e]||0)/n;l+=t*o});return{observedAgreement:r,expectedAgreement:l,kappa:l>=1?1:(r-l)/(1-l),disagreements:a}}function computeKappaWeb(){const e=document.getElementById("kappa-coder-a").value.split("\n").map(e=>e.trim()).filter(e=>e.length>0),t=document.getElementById("kappa-coder-b").value.split("\n").map(e=>e.trim()).filter(e=>e.length>0),n=document.getElementById("kappa-result");if(0===e.length||0===t.length)return void showToast("Vui lòng nhập mã cho cả 2 người mã hoá.","warning");if(e.length!==t.length)return void showToast(`Số dòng không khớp: Coder A có ${e.length} dòng, Coder B có ${t.length} dòng.`,"error");const o=computeCohenKappa(e,t);let a;a=o.kappa<0?"Kém (Poor)":o.kappa<=.2?"Nhẹ (Slight)":o.kappa<=.4?"Vừa phải (Fair)":o.kappa<=.6?"Trung bình (Moderate)":o.kappa<=.8?"Đáng kể (Substantial)":"Gần như hoàn hảo (Almost Perfect)";const i=o.disagreements.length>0?o.disagreements.slice(0,15).map(e=>`<div class="text-sm text-slate-500 py-1 border-b border-slate-50">Dòng ${e.index+1}: <span class="text-red-500">"${e.a}"</span> ≠ <span class="text-red-500">"${e.b}"</span></div>`).join(""):'<p class="text-emerald-600 text-sm">✅ Không có dòng nào bất đồng.</p>';n.innerHTML=`\n        <h4 class="font-serif text-lg font-semibold text-slate-900 mb-4">Kết quả (${e.length} item)</h4>\n        <div class="grid grid-cols-3 gap-4 mb-6">\n            <div class="bg-slate-50 rounded-lg p-4 text-center">\n                <p class="text-2xl font-bold text-slate-900">${(100*o.observedAgreement).toFixed(1)}%</p>\n                <p class="text-xs text-slate-500 mt-1">Tỷ lệ đồng thuận</p>\n            </div>\n            <div class="bg-slate-50 rounded-lg p-4 text-center">\n                <p class="text-2xl font-bold text-accent-600">${o.kappa.toFixed(3)}</p>\n                <p class="text-xs text-slate-500 mt-1">Cohen's Kappa</p>\n            </div>\n            <div class="bg-slate-50 rounded-lg p-4 text-center">\n                <p class="text-sm font-bold text-slate-900 mt-1.5">${a}</p>\n                <p class="text-xs text-slate-500 mt-1">Thang Landis &amp; Koch</p>\n            </div>\n        </div>\n        <h5 class="font-semibold text-slate-700 mb-2 text-sm">${o.disagreements.length} dòng bất đồng${o.disagreements.length>15?" (hiển thị 15 dòng đầu)":""}</h5>\n        ${i}\n    `,n.classList.remove("hidden")}
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+if (typeof tailwind !== 'undefined') {
+tailwind.config = {
+theme: {
+extend: {
+fontFamily: {
+sans: ['Inter', 'sans-serif'],
+serif: ['"Source Serif 4"', 'serif'],
+},
+colors: {
+accent: {
+50: '#eef2ff', 100: '#e0e7ff', 400: '#818cf8',
+500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+}
+}
+}
+}
+}
+}
+</script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+body { background-color: #f8fafc; color: #0f172a; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+.field-input {
+background: #fff; border: 1px solid #e2e8f0; color: #0f172a;
+transition: border-color 0.15s, box-shadow 0.15s;
+}
+.field-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12); }
+.field-input::placeholder { color: #94a3b8; }
+.view-section { display: none; animation: fadeIn 0.25s ease; }
+.view-section.active { display: flex; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.nav-item { border-left: 3px solid transparent; }
+.nav-item.active { border-left-color: #4f46e5; background: #eef2ff; color: #4338ca; }
+.nav-item.active i { color: #4f46e5; }
+.modal-overlay {
+display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.4);
+z-index: 1000; align-items: center; justify-content: center; animation: fadeIn 0.15s ease;
+}
+.modal-overlay.active { display: flex; }
+#toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
+.toast { padding: 12px 22px; border-radius: 10px; color: white; font-weight: 500; font-size: 14px; box-shadow: 0 8px 20px rgba(0,0,0,0.15); display: flex; align-items: center; gap: 10px; animation: slideUp 0.25s ease forwards; }
+.toast-success { background: #059669; }
+.toast-error { background: #dc2626; }
+.toast-warning { background: #d97706; }
+@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.theme-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; }
+</style>
 </head>
 <body class="flex h-screen antialiased">
-
-    <div id="app" class="flex w-full h-full">
-        <!-- Sidebar -->
-        <nav class="w-72 flex flex-col bg-white border-r border-slate-200 shrink-0">
-            <div class="flex items-center gap-3 px-6 py-6 border-b border-slate-100">
-                <div class="w-10 h-10 rounded-lg bg-accent-600 flex items-center justify-center">
-                    <i class="fa-solid fa-feather-pointed text-white text-lg"></i>
-                </div>
-                <div>
-                    <h1 class="font-serif font-bold text-lg leading-tight text-slate-900">Thesis AI</h1>
-                    <p class="text-[11px] text-slate-400 font-medium tracking-wide uppercase">Research Dashboard</p>
-                </div>
-            </div>
-
-            <ul class="flex-1 px-3 py-4 space-y-1 overflow-y-auto text-sm">
-                <li class="nav-item active px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('documents', this)">
-                    <i class="fa-solid fa-table-list w-5 text-center"></i><span class="font-medium">Kho Dữ Liệu</span>
-                </li>
-                <li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('upload', this)">
-                    <i class="fa-solid fa-cloud-arrow-up w-5 text-center"></i><span class="font-medium">Tải PDF Lên</span>
-                </li>
-                <li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('notebooklm', this)">
-                    <i class="fa-solid fa-bolt w-5 text-center"></i><span class="font-medium">Dán từ NotebookLM</span>
-                </li>
-
-                <p class="px-4 pt-5 pb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Trực quan hoá</p>
-                <li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('graph', this)">
-                    <i class="fa-solid fa-diagram-project w-5 text-center"></i><span class="font-medium">Knowledge Graph</span>
-                </li>
-                <li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('timeline', this)">
-                    <i class="fa-solid fa-calendar-days w-5 text-center"></i><span class="font-medium">Timeline Nghiên cứu</span>
-                </li>
-
-                <p class="px-4 pt-5 pb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Công cụ Báo chí học</p>
-                <li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('news', this)">
-                    <i class="fa-solid fa-newspaper w-5 text-center"></i><span class="font-medium">Phân tích Tin tức</span>
-                </li>
-                <li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('interview', this)">
-                    <i class="fa-solid fa-microphone w-5 text-center"></i><span class="font-medium">Mã hoá Phỏng vấn</span>
-                </li>
-                <li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('kappa', this)">
-                    <i class="fa-solid fa-chart-simple w-5 text-center"></i><span class="font-medium">Độ tin cậy Mã hoá</span>
-                </li>
-            </ul>
-
-            <div class="p-4 border-t border-slate-100">
-                <div class="bg-slate-50 rounded-xl px-4 py-3 flex items-center gap-2.5 border border-slate-100">
-                    <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
-                    <span class="text-xs text-slate-500 font-medium">Hệ thống sẵn sàng</span>
-                </div>
-            </div>
-        </nav>
-
-        <!-- Main -->
-        <main class="flex-1 flex flex-col p-8 overflow-hidden gap-6">
-            <header class="flex justify-between items-center shrink-0">
-                <h2 id="page-title" class="font-serif font-semibold text-2xl text-slate-900">Kho Dữ Liệu</h2>
-                <div class="flex items-center gap-3">
-                    <button class="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 text-sm font-medium flex items-center gap-2" onclick="openSettings()">
-                        <i class="fa-solid fa-gear"></i> Cài đặt
-                    </button>
-                    <button class="px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium flex items-center gap-2" onclick="loadDocuments()">
-                        <i class="fa-solid fa-rotate"></i> Làm mới
-                    </button>
-                </div>
-            </header>
-
-            <!-- Documents -->
-            <section id="view-documents" class="view-section active flex-col flex-1 min-h-0">
-                <div class="theme-card flex flex-col flex-1 overflow-hidden">
-                    <div class="px-6 py-4 border-b border-slate-100 flex flex-wrap gap-3 items-center justify-between">
-                        <div class="flex gap-2 flex-wrap">
-                            <button class="px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-medium border border-slate-200 flex items-center gap-2" onclick="exportDocs('md')"><i class="fa-brands fa-markdown text-slate-500"></i> Markdown</button>
-                            <button class="px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-medium border border-slate-200 flex items-center gap-2" onclick="exportDocs('docx')"><i class="fa-solid fa-file-word text-blue-500"></i> Word</button>
-                            <button class="px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-medium border border-slate-200 flex items-center gap-2" onclick="exportDocs('xlsx')"><i class="fa-solid fa-file-excel text-emerald-500"></i> Excel</button>
-                            <button class="px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-medium border border-slate-200 flex items-center gap-2" onclick="exportRis()"><i class="fa-solid fa-book-bookmark text-orange-500"></i> RIS</button>
-                            <button class="px-3.5 py-2 rounded-lg bg-accent-50 hover:bg-accent-100 text-accent-700 text-sm font-medium border border-accent-100 flex items-center gap-2" onclick="synthesizeLiteratureReview()"><i class="fa-solid fa-layer-group"></i> Tổng hợp Literature Review</button>
-                        </div>
-                        <div class="relative">
-                            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
-                            <input type="text" id="doc-search" oninput="filterDocuments()" placeholder="Tìm theo tên file, tác giả, tựa đề..." class="field-input rounded-lg pl-9 pr-4 py-2 text-sm w-72">
-                        </div>
-                    </div>
-                    <div class="flex-1 overflow-auto">
-                        <table class="w-full text-left border-collapse text-sm">
-                            <thead class="bg-slate-50 sticky top-0 z-10">
-                                <tr>
-                                    <th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200 w-12 text-center"><input type="checkbox" id="select-all" onclick="toggleSelectAll()" class="w-4 h-4 rounded border-slate-300 accent-accent-600 cursor-pointer"></th>
-                                    <th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200">Tên File</th>
-                                    <th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200">Tác giả</th>
-                                    <th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200">Lý thuyết</th>
-                                    <th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200">Phương pháp</th>
-                                    <th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200 text-center">Hành động</th>
-                                </tr>
-                            </thead>
-                            <tbody id="docs-body" class="divide-y divide-slate-100">
-                                <tr><td colspan="6" class="px-6 py-16 text-center text-slate-400">Đang tải dữ liệu...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div id="docs-pagination" class="px-6 py-3 border-t border-slate-100 flex items-center justify-between text-sm text-slate-500 hidden">
-                        <span id="docs-pagination-info"></span>
-                        <div class="flex items-center gap-2">
-                            <button id="docs-prev-page" onclick="changeDocPage(-1)" class="px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed" disabled><i class="fa-solid fa-chevron-left"></i></button>
-                            <button id="docs-next-page" onclick="changeDocPage(1)" class="px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed" disabled><i class="fa-solid fa-chevron-right"></i></button>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Upload -->
-            <section id="view-upload" class="view-section flex-col flex-1 justify-center items-center h-full min-h-0">
-                <div class="w-full max-w-2xl theme-card p-12 text-center border-2 border-dashed border-slate-300 hover:border-accent-400 transition-colors cursor-pointer" id="drop-zone" ondragover="event.preventDefault()" ondrop="handleDrop(event)" onclick="document.getElementById('file-upload').click()">
-                    <div class="w-20 h-20 bg-accent-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                        <i class="fa-solid fa-cloud-arrow-up text-4xl text-accent-600"></i>
-                    </div>
-                    <h3 class="font-serif text-2xl font-semibold text-slate-900 mb-2">Kéo thả file PDF vào đây</h3>
-                    <p class="text-slate-500 mb-8">hoặc click để chọn file từ máy tính của bạn</p>
-                    <input type="file" id="file-upload" accept=".pdf" class="hidden" onchange="handleFileSelect(event)">
-                    <button class="px-6 py-3 rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-medium" onclick="event.stopPropagation(); document.getElementById('file-upload').click()">Duyệt file</button>
-                    <div id="upload-status" class="mt-6 font-medium text-accent-700 min-h-[24px]"></div>
-                </div>
-            </section>
-
-            <!-- NotebookLM -->
-            <section id="view-notebooklm" class="view-section flex-col flex-1 h-full min-h-0 items-center justify-center">
-                <div class="w-full max-w-3xl theme-card p-10">
-                    <div class="flex items-start gap-4 mb-6">
-                        <div class="w-12 h-12 bg-accent-50 rounded-xl flex items-center justify-center shrink-0"><i class="fa-solid fa-bolt text-xl text-accent-600"></i></div>
-                        <div>
-                            <h3 class="font-serif text-xl font-semibold text-slate-900 mb-1">Trích xuất Tự động từ NotebookLM</h3>
-                            <p class="text-slate-500 text-sm leading-relaxed">Dán nội dung bóc tách từ NotebookLM. Hệ thống dùng Gemini để phân tích và ghi vào Sheet (nếu mở qua Apps Script).</p>
-                        </div>
-                    </div>
-                    <textarea id="notebooklm-input" class="field-input w-full rounded-xl p-4 min-h-[280px] text-sm font-mono mb-6" placeholder="Paste nội dung bóc tách từ NotebookLM vào đây..."></textarea>
-                    <div class="flex items-center justify-between bg-slate-50 p-4 rounded-xl border border-slate-100">
-                        <div id="notebooklm-status" class="font-medium text-sm text-accent-700"></div>
-                        <button class="px-6 py-2.5 rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-semibold flex items-center gap-2" onclick="processNotebookLMWeb()"><i class="fa-solid fa-wand-magic-sparkles"></i> Tiến hành Phân tích</button>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Knowledge Graph -->
-            <section id="view-graph" class="view-section flex-col flex-1 h-full min-h-0">
-                <div class="theme-card flex-1 overflow-hidden relative">
-                    <iframe src="knowledge_graph.html" class="w-full h-full border-none absolute inset-0" id="graph-frame"></iframe>
-                </div>
-            </section>
-
-            <!-- Timeline -->
-            <section id="view-timeline" class="view-section flex-col flex-1 h-full min-h-0">
-                <div class="theme-card flex-1 overflow-hidden relative">
-                    <iframe src="" class="w-full h-full border-none absolute inset-0" id="timeline-frame"></iframe>
-                </div>
-            </section>
-
-            <!-- News Analysis -->
-            <section id="view-news" class="view-section flex-col flex-1 min-h-0 gap-6 overflow-y-auto">
-                <div class="theme-card p-8">
-                    <h3 class="font-serif text-xl font-semibold text-slate-900 mb-1">📰 Phân tích Khung Tin tức</h3>
-                    <p class="text-slate-500 text-sm mb-6">Dán nội dung bài báo tin tức thật. Có thể so sánh tối đa 3 bài viết về cùng 1 sự kiện.</p>
-
-                    <div class="grid grid-cols-2 gap-3 mb-3">
-                        <input type="text" id="news-source-1" placeholder="Nguồn/Tòa soạn" class="field-input rounded-lg px-4 py-2.5 text-sm">
-                        <input type="text" id="news-date-1" placeholder="Ngày đăng" class="field-input rounded-lg px-4 py-2.5 text-sm">
-                    </div>
-                    <textarea id="news-text-1" class="field-input w-full rounded-lg p-4 min-h-[160px] text-sm mb-3" placeholder="Dán nội dung bài báo 1..."></textarea>
-
-                    <span class="text-accent-600 text-sm font-medium cursor-pointer hover:underline" id="news-compare-toggle" onclick="toggleNewsCompare()">+ So sánh với bài báo khác</span>
-
-                    <div id="news-compare-blocks" class="hidden mt-4 space-y-4">
-                        <div>
-                            <div class="grid grid-cols-2 gap-3 mb-2">
-                                <input type="text" id="news-source-2" placeholder="Nguồn/Tòa soạn (bài 2)" class="field-input rounded-lg px-4 py-2.5 text-sm">
-                                <input type="text" id="news-date-2" placeholder="Ngày đăng" class="field-input rounded-lg px-4 py-2.5 text-sm">
-                            </div>
-                            <textarea id="news-text-2" class="field-input w-full rounded-lg p-4 min-h-[140px] text-sm" placeholder="Dán nội dung bài báo 2..."></textarea>
-                        </div>
-                        <div>
-                            <div class="grid grid-cols-2 gap-3 mb-2">
-                                <input type="text" id="news-source-3" placeholder="Nguồn/Tòa soạn (bài 3, tuỳ chọn)" class="field-input rounded-lg px-4 py-2.5 text-sm">
-                                <input type="text" id="news-date-3" placeholder="Ngày đăng" class="field-input rounded-lg px-4 py-2.5 text-sm">
-                            </div>
-                            <textarea id="news-text-3" class="field-input w-full rounded-lg p-4 min-h-[140px] text-sm" placeholder="Dán nội dung bài báo 3 (tuỳ chọn)..."></textarea>
-                        </div>
-                    </div>
-
-                    <button class="mt-5 px-6 py-2.5 rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-semibold flex items-center gap-2" onclick="submitNewsAnalysis()"><i class="fa-solid fa-magnifying-glass-chart"></i> Bắt đầu Phân tích</button>
-                    <div id="news-status" class="mt-3 text-sm font-medium text-accent-700"></div>
-                </div>
-
-                <div id="news-result" class="theme-card p-8 hidden"></div>
-
-                <div class="theme-card p-8">
-                    <h4 class="font-semibold text-slate-900 mb-4">Lịch sử phân tích gần đây</h4>
-                    <div id="news-history" class="space-y-3 text-sm text-slate-500">Chưa có dữ liệu.</div>
-                </div>
-            </section>
-
-            <!-- Interview Coding -->
-            <section id="view-interview" class="view-section flex-col flex-1 min-h-0 gap-6 overflow-y-auto">
-                <div class="theme-card p-8">
-                    <h3 class="font-serif text-xl font-semibold text-slate-900 mb-1">🎙️ Mã hoá Phỏng vấn (Thematic Coding)</h3>
-                    <p class="text-slate-500 text-sm mb-6">Dán transcript phỏng vấn. Hệ thống mã hoá theo chủ đề (phương pháp Braun &amp; Clarke), kèm trích dẫn minh hoạ.</p>
-                    <input type="text" id="interview-role" placeholder="Vai trò người được phỏng vấn (VD: Biên tập viên báo X)" class="field-input w-full rounded-lg px-4 py-2.5 text-sm mb-3">
-                    <textarea id="interview-transcript" class="field-input w-full rounded-lg p-4 min-h-[240px] text-sm" placeholder="Dán transcript phỏng vấn vào đây..."></textarea>
-                    <button class="mt-5 px-6 py-2.5 rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-semibold flex items-center gap-2" onclick="submitInterviewCoding()"><i class="fa-solid fa-tags"></i> Bắt đầu Mã hoá</button>
-                    <div id="interview-status" class="mt-3 text-sm font-medium text-accent-700"></div>
-                </div>
-
-                <div id="interview-result" class="theme-card p-8 hidden"></div>
-
-                <div class="theme-card p-8">
-                    <h4 class="font-semibold text-slate-900 mb-4">Lịch sử mã hoá gần đây</h4>
-                    <div id="interview-history" class="space-y-3 text-sm text-slate-500">Chưa có dữ liệu.</div>
-                </div>
-            </section>
-
-            <!-- Cohen's Kappa -->
-            <section id="view-kappa" class="view-section flex-col flex-1 min-h-0 gap-6 overflow-y-auto">
-                <div class="theme-card p-8">
-                    <h3 class="font-serif text-xl font-semibold text-slate-900 mb-1">📊 Độ tin cậy giữa 2 người mã hoá (Cohen's Kappa)</h3>
-                    <p class="text-slate-500 text-sm mb-6">Dán danh sách mã của 2 người mã hoá, mỗi dòng 1 item, cùng thứ tự. Tính toán hoàn toàn phía trình duyệt, không gửi lên Backend.</p>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Mã của Coder A</label>
-                            <textarea id="kappa-coder-a" class="field-input w-full rounded-lg p-4 min-h-[200px] text-sm font-mono" placeholder="Yes&#10;No&#10;Yes&#10;..."></textarea>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Mã của Coder B</label>
-                            <textarea id="kappa-coder-b" class="field-input w-full rounded-lg p-4 min-h-[200px] text-sm font-mono" placeholder="Yes&#10;No&#10;No&#10;..."></textarea>
-                        </div>
-                    </div>
-                    <button class="mt-5 px-6 py-2.5 rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-semibold flex items-center gap-2" onclick="computeKappaWeb()"><i class="fa-solid fa-calculator"></i> Tính Độ tin cậy</button>
-                </div>
-                <div id="kappa-result" class="theme-card p-8 hidden"></div>
-            </section>
-        </main>
-    </div>
-
-    <!-- Floating Chatbot -->
-    <div class="fixed bottom-8 right-8 z-50 flex flex-col items-end">
-        <div id="chat-window" class="theme-card w-[380px] h-[500px] rounded-2xl mb-4 shadow-xl flex-col overflow-hidden hidden">
-            <div class="bg-slate-50 p-4 border-b border-slate-100 flex items-center justify-between">
-                <div class="flex items-center gap-2.5">
-                    <div class="w-9 h-9 rounded-full bg-accent-50 flex items-center justify-center"><i class="fa-solid fa-robot text-accent-600"></i></div>
-                    <h3 class="font-semibold text-slate-900 text-sm">Trợ lý AI Thesis</h3>
-                </div>
-                <button onclick="toggleChat()" class="w-8 h-8 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-500"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div id="chat-history" class="flex-1 p-4 overflow-y-auto flex flex-col gap-3 bg-slate-50/50">
-                <div class="bg-white rounded-xl rounded-tl-sm p-3 max-w-[85%] self-start border border-slate-100 text-sm text-slate-700">Xin chào! Tôi có thể giúp bạn tra cứu thông tin từ kho luận án. Bạn muốn hỏi gì?</div>
-            </div>
-            <div class="p-3 border-t border-slate-100 bg-white">
-                <div class="flex gap-2 bg-slate-50 rounded-xl p-1 border border-slate-200 focus-within:border-accent-400">
-                    <input type="text" id="chat-input" placeholder="Nhập câu hỏi..." class="bg-transparent border-none flex-1 px-3 py-2 text-sm focus:outline-none" onkeypress="if(event.key === 'Enter') sendMessage()">
-                    <button class="w-10 h-10 rounded-lg bg-accent-600 hover:bg-accent-700 text-white flex items-center justify-center" onclick="sendMessage()"><i class="fa-solid fa-paper-plane text-sm"></i></button>
-                </div>
-            </div>
-        </div>
-        <button onclick="toggleChat()" class="w-14 h-14 rounded-full bg-accent-600 hover:bg-accent-700 text-white shadow-lg flex items-center justify-center"><i class="fa-solid fa-message text-xl"></i></button>
-    </div>
-
-    <!-- Modal Settings -->
-    <div id="settings-modal" class="modal-overlay">
-        <div class="theme-card w-full max-w-lg overflow-hidden">
-            <div class="px-8 py-5 border-b border-slate-100 flex items-center justify-between">
-                <h3 class="font-serif font-semibold text-lg text-slate-900">Cài đặt Hệ thống</h3>
-                <button onclick="closeSettings()" class="text-slate-400 hover:text-slate-700"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div class="p-8 space-y-5">
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Backend URL</label>
-                    <input type="text" id="global-backend-url" class="field-input w-full rounded-lg px-4 py-2.5 text-sm">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Gemini API Key</label>
-                    <input type="password" id="global-gemini-key" class="field-input w-full rounded-lg px-4 py-2.5 text-sm">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Pinecone API Key</label>
-                    <input type="password" id="global-pinecone-key" class="field-input w-full rounded-lg px-4 py-2.5 text-sm">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Backend Secret (Tuỳ chọn)</label>
-                    <input type="password" id="global-backend-secret" class="field-input w-full rounded-lg px-4 py-2.5 text-sm" placeholder="Chỉ cần nếu Backend có bật xác thực">
-                </div>
-            </div>
-            <div class="px-8 py-5 border-t border-slate-100 flex items-center justify-end gap-3">
-                <button onclick="closeSettings()" class="px-5 py-2 rounded-lg text-slate-600 hover:bg-slate-50 text-sm font-medium">Hủy</button>
-                <button onclick="saveSettings()" class="px-5 py-2 rounded-lg bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium">Lưu</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal Report Viewer (Literature Review / Comparison) -->
-    <div id="report-modal" class="modal-overlay">
-        <div class="theme-card w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
-            <div class="px-8 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-                <h3 id="report-modal-title" class="font-serif font-semibold text-lg text-slate-900">Báo cáo</h3>
-                <button onclick="closeReportModal()" class="text-slate-400 hover:text-slate-700"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div id="report-modal-body" class="p-8 overflow-y-auto text-sm text-slate-700 leading-relaxed whitespace-pre-wrap"></div>
-            <div class="px-8 py-5 border-t border-slate-100 flex items-center justify-end gap-3 shrink-0">
-                <button onclick="downloadReportModal()" class="px-5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium"><i class="fa-solid fa-download mr-1.5"></i>Tải .md</button>
-                <button onclick="closeReportModal()" class="px-5 py-2 rounded-lg bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium">Đóng</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="toast-container"></div>
+<div id="app" class="flex w-full h-full">
+<nav class="w-72 flex flex-col bg-white border-r border-slate-200 shrink-0">
+<div class="flex items-center gap-3 px-6 py-6 border-b border-slate-100">
+<div class="w-10 h-10 rounded-lg bg-accent-600 flex items-center justify-center">
+<i class="fa-solid fa-feather-pointed text-white text-lg"></i>
+</div>
+<div>
+<h1 class="font-serif font-bold text-lg leading-tight text-slate-900">Thesis AI</h1>
+<p class="text-[11px] text-slate-400 font-medium tracking-wide uppercase">Research Dashboard</p>
+</div>
+</div>
+<ul class="flex-1 px-3 py-4 space-y-1 overflow-y-auto text-sm">
+<li class="nav-item active px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('documents', this)">
+<i class="fa-solid fa-table-list w-5 text-center"></i><span class="font-medium">Kho Dữ Liệu</span>
+</li>
+<li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('upload', this)">
+<i class="fa-solid fa-cloud-arrow-up w-5 text-center"></i><span class="font-medium">Tải PDF Lên</span>
+</li>
+<li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('notebooklm', this)">
+<i class="fa-solid fa-bolt w-5 text-center"></i><span class="font-medium">Dán từ NotebookLM</span>
+</li>
+<p class="px-4 pt-5 pb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Trực quan hoá</p>
+<li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('graph', this)">
+<i class="fa-solid fa-diagram-project w-5 text-center"></i><span class="font-medium">Knowledge Graph</span>
+</li>
+<li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('timeline', this)">
+<i class="fa-solid fa-calendar-days w-5 text-center"></i><span class="font-medium">Timeline Nghiên cứu</span>
+</li>
+<p class="px-4 pt-5 pb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Công cụ Báo chí học</p>
+<li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('news', this)">
+<i class="fa-solid fa-newspaper w-5 text-center"></i><span class="font-medium">Phân tích Tin tức</span>
+</li>
+<li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('interview', this)">
+<i class="fa-solid fa-microphone w-5 text-center"></i><span class="font-medium">Mã hoá Phỏng vấn</span>
+</li>
+<li class="nav-item px-4 py-2.5 rounded-r-lg cursor-pointer flex items-center gap-3 text-slate-600 hover:bg-slate-50" onclick="switchTab('kappa', this)">
+<i class="fa-solid fa-chart-simple w-5 text-center"></i><span class="font-medium">Độ tin cậy Mã hoá</span>
+</li>
+</ul>
+<div class="p-4 border-t border-slate-100">
+<div class="bg-slate-50 rounded-xl px-4 py-3 flex items-center gap-2.5 border border-slate-100">
+<div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+<span class="text-xs text-slate-500 font-medium">Hệ thống sẵn sàng</span>
+</div>
+</div>
+</nav>
+<main class="flex-1 flex flex-col p-8 overflow-hidden gap-6">
+<header class="flex justify-between items-center shrink-0">
+<h2 id="page-title" class="font-serif font-semibold text-2xl text-slate-900">Kho Dữ Liệu</h2>
+<div class="flex items-center gap-3">
+<button class="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 text-sm font-medium flex items-center gap-2" onclick="openSettings()">
+<i class="fa-solid fa-gear"></i> Cài đặt
+</button>
+<button class="px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium flex items-center gap-2" onclick="loadDocuments()">
+<i class="fa-solid fa-rotate"></i> Làm mới
+</button>
+</div>
+</header>
+<section id="view-documents" class="view-section active flex-col flex-1 min-h-0">
+<div class="theme-card flex flex-col flex-1 overflow-hidden">
+<div class="px-6 py-4 border-b border-slate-100 flex flex-wrap gap-3 items-center justify-between">
+<div class="flex gap-2 flex-wrap">
+<button class="px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-medium border border-slate-200 flex items-center gap-2" onclick="exportDocs('md')"><i class="fa-brands fa-markdown text-slate-500"></i> Markdown</button>
+<button class="px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-medium border border-slate-200 flex items-center gap-2" onclick="exportDocs('docx')"><i class="fa-solid fa-file-word text-blue-500"></i> Word</button>
+<button class="px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-medium border border-slate-200 flex items-center gap-2" onclick="exportDocs('xlsx')"><i class="fa-solid fa-file-excel text-emerald-500"></i> Excel</button>
+<button class="px-3.5 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-medium border border-slate-200 flex items-center gap-2" onclick="exportRis()"><i class="fa-solid fa-book-bookmark text-orange-500"></i> RIS</button>
+<button class="px-3.5 py-2 rounded-lg bg-accent-50 hover:bg-accent-100 text-accent-700 text-sm font-medium border border-accent-100 flex items-center gap-2" onclick="synthesizeLiteratureReview()"><i class="fa-solid fa-layer-group"></i> Tổng hợp Literature Review</button>
+</div>
+<div class="relative">
+<i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+<input type="text" id="doc-search" oninput="filterDocuments()" placeholder="Tìm theo tên file, tác giả, tựa đề..." class="field-input rounded-lg pl-9 pr-4 py-2 text-sm w-72">
+</div>
+</div>
+<div class="flex-1 overflow-auto">
+<table class="w-full text-left border-collapse text-sm">
+<thead class="bg-slate-50 sticky top-0 z-10">
+<tr>
+<th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200 w-12 text-center"><input type="checkbox" id="select-all" onclick="toggleSelectAll()" class="w-4 h-4 rounded border-slate-300 accent-accent-600 cursor-pointer"></th>
+<th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200">Tên File</th>
+<th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200">Tác giả</th>
+<th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200">Lý thuyết</th>
+<th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200">Phương pháp</th>
+<th class="px-6 py-3 font-semibold text-slate-500 border-b border-slate-200 text-center">Hành động</th>
+</tr>
+</thead>
+<tbody id="docs-body" class="divide-y divide-slate-100">
+<tr><td colspan="6" class="px-6 py-16 text-center text-slate-400">Đang tải dữ liệu...</td></tr>
+</tbody>
+</table>
+</div>
+<div id="docs-pagination" class="px-6 py-3 border-t border-slate-100 flex items-center justify-between text-sm text-slate-500 hidden">
+<span id="docs-pagination-info"></span>
+<div class="flex items-center gap-2">
+<button id="docs-prev-page" onclick="changeDocPage(-1)" class="px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed" disabled><i class="fa-solid fa-chevron-left"></i></button>
+<button id="docs-next-page" onclick="changeDocPage(1)" class="px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed" disabled><i class="fa-solid fa-chevron-right"></i></button>
+</div>
+</div>
+</div>
+</section>
+<section id="view-upload" class="view-section flex-col flex-1 justify-center items-center h-full min-h-0">
+<div class="w-full max-w-2xl theme-card p-12 text-center border-2 border-dashed border-slate-300 hover:border-accent-400 transition-colors cursor-pointer" id="drop-zone" ondragover="event.preventDefault()" ondrop="handleDrop(event)" onclick="document.getElementById('file-upload').click()">
+<div class="w-20 h-20 bg-accent-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+<i class="fa-solid fa-cloud-arrow-up text-4xl text-accent-600"></i>
+</div>
+<h3 class="font-serif text-2xl font-semibold text-slate-900 mb-2">Kéo thả file PDF vào đây</h3>
+<p class="text-slate-500 mb-8">hoặc click để chọn file từ máy tính của bạn</p>
+<input type="file" id="file-upload" accept=".pdf" class="hidden" onchange="handleFileSelect(event)">
+<button class="px-6 py-3 rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-medium" onclick="event.stopPropagation(); document.getElementById('file-upload').click()">Duyệt file</button>
+<div id="upload-status" class="mt-6 font-medium text-accent-700 min-h-[24px]"></div>
+</div>
+</section>
+<section id="view-notebooklm" class="view-section flex-col flex-1 h-full min-h-0 items-center justify-center">
+<div class="w-full max-w-3xl theme-card p-10">
+<div class="flex items-start gap-4 mb-6">
+<div class="w-12 h-12 bg-accent-50 rounded-xl flex items-center justify-center shrink-0"><i class="fa-solid fa-bolt text-xl text-accent-600"></i></div>
+<div>
+<h3 class="font-serif text-xl font-semibold text-slate-900 mb-1">Trích xuất Tự động từ NotebookLM</h3>
+<p class="text-slate-500 text-sm leading-relaxed">Dán nội dung bóc tách từ NotebookLM. Hệ thống dùng Gemini để phân tích và ghi vào Sheet (nếu mở qua Apps Script).</p>
+</div>
+</div>
+<textarea id="notebooklm-input" class="field-input w-full rounded-xl p-4 min-h-[280px] text-sm font-mono mb-6" placeholder="Paste nội dung bóc tách từ NotebookLM vào đây..."></textarea>
+<div class="flex items-center justify-between bg-slate-50 p-4 rounded-xl border border-slate-100">
+<div id="notebooklm-status" class="font-medium text-sm text-accent-700"></div>
+<button class="px-6 py-2.5 rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-semibold flex items-center gap-2" onclick="processNotebookLMWeb()"><i class="fa-solid fa-wand-magic-sparkles"></i> Tiến hành Phân tích</button>
+</div>
+</div>
+</section>
+<section id="view-graph" class="view-section flex-col flex-1 h-full min-h-0">
+<div class="theme-card flex-1 overflow-hidden relative">
+<iframe src="knowledge_graph.html" class="w-full h-full border-none absolute inset-0" id="graph-frame"></iframe>
+</div>
+</section>
+<section id="view-timeline" class="view-section flex-col flex-1 h-full min-h-0">
+<div class="theme-card flex-1 overflow-hidden relative">
+<iframe src="" class="w-full h-full border-none absolute inset-0" id="timeline-frame"></iframe>
+</div>
+</section>
+<section id="view-news" class="view-section flex-col flex-1 min-h-0 gap-6 overflow-y-auto">
+<div class="theme-card p-8">
+<h3 class="font-serif text-xl font-semibold text-slate-900 mb-1">📰 Phân tích Khung Tin tức</h3>
+<p class="text-slate-500 text-sm mb-6">Dán nội dung bài báo tin tức thật. Có thể so sánh tối đa 3 bài viết về cùng 1 sự kiện.</p>
+<div class="grid grid-cols-2 gap-3 mb-3">
+<input type="text" id="news-source-1" placeholder="Nguồn/Tòa soạn" class="field-input rounded-lg px-4 py-2.5 text-sm">
+<input type="text" id="news-date-1" placeholder="Ngày đăng" class="field-input rounded-lg px-4 py-2.5 text-sm">
+</div>
+<textarea id="news-text-1" class="field-input w-full rounded-lg p-4 min-h-[160px] text-sm mb-3" placeholder="Dán nội dung bài báo 1..."></textarea>
+<span class="text-accent-600 text-sm font-medium cursor-pointer hover:underline" id="news-compare-toggle" onclick="toggleNewsCompare()">+ So sánh với bài báo khác</span>
+<div id="news-compare-blocks" class="hidden mt-4 space-y-4">
+<div>
+<div class="grid grid-cols-2 gap-3 mb-2">
+<input type="text" id="news-source-2" placeholder="Nguồn/Tòa soạn (bài 2)" class="field-input rounded-lg px-4 py-2.5 text-sm">
+<input type="text" id="news-date-2" placeholder="Ngày đăng" class="field-input rounded-lg px-4 py-2.5 text-sm">
+</div>
+<textarea id="news-text-2" class="field-input w-full rounded-lg p-4 min-h-[140px] text-sm" placeholder="Dán nội dung bài báo 2..."></textarea>
+</div>
+<div>
+<div class="grid grid-cols-2 gap-3 mb-2">
+<input type="text" id="news-source-3" placeholder="Nguồn/Tòa soạn (bài 3, tuỳ chọn)" class="field-input rounded-lg px-4 py-2.5 text-sm">
+<input type="text" id="news-date-3" placeholder="Ngày đăng" class="field-input rounded-lg px-4 py-2.5 text-sm">
+</div>
+<textarea id="news-text-3" class="field-input w-full rounded-lg p-4 min-h-[140px] text-sm" placeholder="Dán nội dung bài báo 3 (tuỳ chọn)..."></textarea>
+</div>
+</div>
+<button class="mt-5 px-6 py-2.5 rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-semibold flex items-center gap-2" onclick="submitNewsAnalysis()"><i class="fa-solid fa-magnifying-glass-chart"></i> Bắt đầu Phân tích</button>
+<div id="news-status" class="mt-3 text-sm font-medium text-accent-700"></div>
+</div>
+<div id="news-result" class="theme-card p-8 hidden"></div>
+<div class="theme-card p-8">
+<h4 class="font-semibold text-slate-900 mb-4">Lịch sử phân tích gần đây</h4>
+<div id="news-history" class="space-y-3 text-sm text-slate-500">Chưa có dữ liệu.</div>
+</div>
+</section>
+<section id="view-interview" class="view-section flex-col flex-1 min-h-0 gap-6 overflow-y-auto">
+<div class="theme-card p-8">
+<h3 class="font-serif text-xl font-semibold text-slate-900 mb-1">🎙️ Mã hoá Phỏng vấn (Thematic Coding)</h3>
+<p class="text-slate-500 text-sm mb-6">Dán transcript phỏng vấn. Hệ thống mã hoá theo chủ đề (phương pháp Braun &amp; Clarke), kèm trích dẫn minh hoạ.</p>
+<input type="text" id="interview-role" placeholder="Vai trò người được phỏng vấn (VD: Biên tập viên báo X)" class="field-input w-full rounded-lg px-4 py-2.5 text-sm mb-3">
+<textarea id="interview-transcript" class="field-input w-full rounded-lg p-4 min-h-[240px] text-sm" placeholder="Dán transcript phỏng vấn vào đây..."></textarea>
+<button class="mt-5 px-6 py-2.5 rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-semibold flex items-center gap-2" onclick="submitInterviewCoding()"><i class="fa-solid fa-tags"></i> Bắt đầu Mã hoá</button>
+<div id="interview-status" class="mt-3 text-sm font-medium text-accent-700"></div>
+</div>
+<div id="interview-result" class="theme-card p-8 hidden"></div>
+<div class="theme-card p-8">
+<h4 class="font-semibold text-slate-900 mb-4">Lịch sử mã hoá gần đây</h4>
+<div id="interview-history" class="space-y-3 text-sm text-slate-500">Chưa có dữ liệu.</div>
+</div>
+</section>
+<section id="view-kappa" class="view-section flex-col flex-1 min-h-0 gap-6 overflow-y-auto">
+<div class="theme-card p-8">
+<h3 class="font-serif text-xl font-semibold text-slate-900 mb-1">📊 Độ tin cậy giữa 2 người mã hoá (Cohen's Kappa)</h3>
+<p class="text-slate-500 text-sm mb-6">Dán danh sách mã của 2 người mã hoá, mỗi dòng 1 item, cùng thứ tự. Tính toán hoàn toàn phía trình duyệt, không gửi lên Backend.</p>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Mã của Coder A</label>
+<textarea id="kappa-coder-a" class="field-input w-full rounded-lg p-4 min-h-[200px] text-sm font-mono" placeholder="Yes&#10;No&#10;Yes&#10;..."></textarea>
+</div>
+<div>
+<label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Mã của Coder B</label>
+<textarea id="kappa-coder-b" class="field-input w-full rounded-lg p-4 min-h-[200px] text-sm font-mono" placeholder="Yes&#10;No&#10;No&#10;..."></textarea>
+</div>
+</div>
+<button class="mt-5 px-6 py-2.5 rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-semibold flex items-center gap-2" onclick="computeKappaWeb()"><i class="fa-solid fa-calculator"></i> Tính Độ tin cậy</button>
+</div>
+<div id="kappa-result" class="theme-card p-8 hidden"></div>
+</section>
+</main>
+</div>
+<div class="fixed bottom-8 right-8 z-50 flex flex-col items-end">
+<div id="chat-window" class="theme-card w-[380px] h-[500px] rounded-2xl mb-4 shadow-xl flex-col overflow-hidden hidden">
+<div class="bg-slate-50 p-4 border-b border-slate-100 flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-9 h-9 rounded-full bg-accent-50 flex items-center justify-center"><i class="fa-solid fa-robot text-accent-600"></i></div>
+<h3 class="font-semibold text-slate-900 text-sm">Trợ lý AI Thesis</h3>
+</div>
+<button onclick="toggleChat()" class="w-8 h-8 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-500"><i class="fa-solid fa-xmark"></i></button>
+</div>
+<div id="chat-history" class="flex-1 p-4 overflow-y-auto flex flex-col gap-3 bg-slate-50/50">
+<div class="bg-white rounded-xl rounded-tl-sm p-3 max-w-[85%] self-start border border-slate-100 text-sm text-slate-700">Xin chào! Tôi có thể giúp bạn tra cứu thông tin từ kho luận án. Bạn muốn hỏi gì?</div>
+</div>
+<div class="p-3 border-t border-slate-100 bg-white">
+<div class="flex gap-2 bg-slate-50 rounded-xl p-1 border border-slate-200 focus-within:border-accent-400">
+<input type="text" id="chat-input" placeholder="Nhập câu hỏi..." class="bg-transparent border-none flex-1 px-3 py-2 text-sm focus:outline-none" onkeypress="if(event.key === 'Enter') sendMessage()">
+<button class="w-10 h-10 rounded-lg bg-accent-600 hover:bg-accent-700 text-white flex items-center justify-center" onclick="sendMessage()"><i class="fa-solid fa-paper-plane text-sm"></i></button>
+</div>
+</div>
+</div>
+<button onclick="toggleChat()" class="w-14 h-14 rounded-full bg-accent-600 hover:bg-accent-700 text-white shadow-lg flex items-center justify-center"><i class="fa-solid fa-message text-xl"></i></button>
+</div>
+<div id="settings-modal" class="modal-overlay">
+<div class="theme-card w-full max-w-lg overflow-hidden">
+<div class="px-8 py-5 border-b border-slate-100 flex items-center justify-between">
+<h3 class="font-serif font-semibold text-lg text-slate-900">Cài đặt Hệ thống</h3>
+<button onclick="closeSettings()" class="text-slate-400 hover:text-slate-700"><i class="fa-solid fa-xmark"></i></button>
+</div>
+<div class="p-8 space-y-5">
+<div>
+<label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Backend URL</label>
+<input type="text" id="global-backend-url" class="field-input w-full rounded-lg px-4 py-2.5 text-sm">
+</div>
+<div>
+<label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Gemini API Key</label>
+<input type="password" id="global-gemini-key" class="field-input w-full rounded-lg px-4 py-2.5 text-sm">
+</div>
+<div>
+<label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Pinecone API Key</label>
+<input type="password" id="global-pinecone-key" class="field-input w-full rounded-lg px-4 py-2.5 text-sm">
+</div>
+<div>
+<label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Backend Secret (Tuỳ chọn)</label>
+<input type="password" id="global-backend-secret" class="field-input w-full rounded-lg px-4 py-2.5 text-sm" placeholder="Chỉ cần nếu Backend có bật xác thực">
+</div>
+</div>
+<div class="px-8 py-5 border-t border-slate-100 flex items-center justify-end gap-3">
+<button onclick="closeSettings()" class="px-5 py-2 rounded-lg text-slate-600 hover:bg-slate-50 text-sm font-medium">Hủy</button>
+<button onclick="saveSettings()" class="px-5 py-2 rounded-lg bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium">Lưu</button>
+</div>
+</div>
+</div>
+<div id="report-modal" class="modal-overlay">
+<div class="theme-card w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+<div class="px-8 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+<h3 id="report-modal-title" class="font-serif font-semibold text-lg text-slate-900">Báo cáo</h3>
+<button onclick="closeReportModal()" class="text-slate-400 hover:text-slate-700"><i class="fa-solid fa-xmark"></i></button>
+</div>
+<div id="report-modal-body" class="p-8 overflow-y-auto text-sm text-slate-700 leading-relaxed whitespace-pre-wrap"></div>
+<div class="px-8 py-5 border-t border-slate-100 flex items-center justify-end gap-3 shrink-0">
+<button onclick="downloadReportModal()" class="px-5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium"><i class="fa-solid fa-download mr-1.5"></i>Tải .md</button>
+<button onclick="closeReportModal()" class="px-5 py-2 rounded-lg bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium">Đóng</button>
+</div>
+</div>
+</div>
+<div id="toast-container"></div>
 </body>
 </html>
