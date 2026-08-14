@@ -4,20 +4,30 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Academic AI Dashboard</title>
+
+    <!-- app.js chạy TRƯỚC mọi CDN bên ngoài (Tailwind/Fonts/FontAwesome) và không phụ
+         thuộc gì vào chúng - script trong HTML chạy tuần tự theo thứ tự văn bản, nên nếu
+         đặt sau 1 script CDN mà CDN đó bị treo/chặn (từng xảy ra khi mở qua Apps Script
+         HtmlService), toàn bộ menu/nút bấm sẽ liệt vì app.js không bao giờ được thực thi.
+         Đặt lên đầu để menu luôn hoạt động dù CDN có tải chậm/lỗi (chỉ ảnh hưởng giao diện). -->
+    <script src="app.js"></script>
+
     <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                        serif: ['"Source Serif 4"', 'serif'],
-                    },
-                    colors: {
-                        accent: {
-                            50: '#eef2ff', 100: '#e0e7ff', 400: '#818cf8',
-                            500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+        if (typeof tailwind !== 'undefined') {
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        fontFamily: {
+                            sans: ['Inter', 'sans-serif'],
+                            serif: ['"Source Serif 4"', 'serif'],
+                        },
+                        colors: {
+                            accent: {
+                                50: '#eef2ff', 100: '#e0e7ff', 400: '#818cf8',
+                                500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+                            }
                         }
                     }
                 }
@@ -376,7 +386,5 @@
     </div>
 
     <div id="toast-container"></div>
-
-    <script src="app.js"></script>
 </body>
 </html>
