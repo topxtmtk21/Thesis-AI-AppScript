@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from app.api.routers import document, chat, jobs
 import os
@@ -14,6 +15,33 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Backend không tự chứa secret nào cả - mọi Gemini/Pinecone key đều do client gửi kèm
+# mỗi request - nhưng nếu URL backend bị lộ, ai cũng gọi được API (tốn tài nguyên,
+# spam Gemini/Pinecone bằng key của chính họ...). Đặt biến môi trường
+# BACKEND_SHARED_SECRET để chỉ Apps Script/Web Dashboard đã cấu hình đúng secret mới
+# gọi được. Để trống thì tắt kiểm tra này (giữ hành vi cũ, không phá vỡ deploy hiện tại).
+BACKEND_SHARED_SECRET = os.environ.get("BACKEND_SHARED_SECRET")
+
+# /api/graph được nhúng qua <iframe src="..."> trong Apps Script nên trình duyệt không
+# gắn được header tuỳ chỉnh - phải loại trừ khỏi việc kiểm tra secret.
+_SECRET_EXEMPT_PATHS = {"/api/graph"}
+
+
+@app.middleware("http")
+async def verify_backend_secret(request: Request, call_next):
+    if (
+        BACKEND_SHARED_SECRET
+        and request.url.path.startswith("/api/")
+        and request.url.path not in _SECRET_EXEMPT_PATHS
+    ):
+        if request.headers.get("x-backend-secret") != BACKEND_SHARED_SECRET:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Unauthorized: thiếu hoặc sai header X-Backend-Secret."}
+            )
+    return await call_next(request)
+
 
 # Include Routers
 app.include_router(document.router, prefix="/api", tags=["Document"])

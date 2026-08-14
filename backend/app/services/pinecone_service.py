@@ -48,15 +48,9 @@ class PineconeManager:
     def _get_embedding(self, text, task_type="retrieval_document"):
         return self._get_embeddings_batch([text], task_type)[0]
 
-    def add_document(self, doc_data: dict):
-        text = doc_data.get("text", "")
-        if not text:
-            return
-            
-        title = doc_data.get("filename", "Unknown")
-        paper_id = str(uuid.uuid4())
-        
-        # Cắt nhỏ văn bản (Semantic Chunking)
+    def chunk_and_embed(self, text: str):
+        """Cắt nhỏ văn bản và tính embedding - không phụ thuộc kết quả phân tích Gemini,
+        nên có thể chạy song song với lệnh gọi Gemini phân tích nội dung (xem jobs.py)."""
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=8000,
             chunk_overlap=1000,
@@ -64,7 +58,20 @@ class PineconeManager:
             is_separator_regex=False,
         )
         text_chunks = text_splitter.split_text(text)
-        
+
+        embeddings = []
+        # Chia text_chunks thành các batch (mỗi batch 50 chunk để vừa Pinecone và Gemini limit)
+        batch_size = 50
+        for i in range(0, len(text_chunks), batch_size):
+            batch_chunks = text_chunks[i:i + batch_size]
+            embeddings.extend(self._get_embeddings_batch(batch_chunks))
+
+        return text_chunks, embeddings
+
+    def upsert_chunks(self, doc_data: dict, text_chunks: list, embeddings: list):
+        title = doc_data.get("filename", "Unknown")
+        paper_id = str(uuid.uuid4())
+
         metadata_dict = {
             "filename": doc_data.get("filename", ""),
             "authors": doc_data.get("authors", ""),
@@ -73,37 +80,30 @@ class PineconeManager:
             "methodology": doc_data.get("methodology", ""),
             "detailedFindings": json.dumps(doc_data.get("detailedFindings", []), ensure_ascii=False)
         }
-            
-        vectors = []
-        
-        # Chia text_chunks thành các batch (mỗi batch 50 chunk để vừa Pinecone và Gemini limit)
+
         batch_size = 50
         for i in range(0, len(text_chunks), batch_size):
-            batch_chunks = text_chunks[i:i+batch_size]
-            
-            # Lấy vector cho cả batch bằng 1 request duy nhất!
-            embeddings = self._get_embeddings_batch(batch_chunks)
-            
             batch_vectors = []
-            for j, chunk in enumerate(batch_chunks):
-                chunk_index = i + j
-                vector_id = f"{paper_id}_chunk_{chunk_index}"
-                
-                meta = {"title": title, "chunk_index": chunk_index, "text": chunk}
+            for j in range(i, min(i + batch_size, len(text_chunks))):
+                vector_id = f"{paper_id}_chunk_{j}"
+                meta = {"title": title, "chunk_index": j, "text": text_chunks[j]}
                 meta.update(metadata_dict)
-                
                 batch_vectors.append({
                     "id": vector_id,
                     "values": embeddings[j],
                     "metadata": meta
                 })
-                
             self.index.upsert(vectors=batch_vectors)
-            time.sleep(1) # Nghỉ một chút giữa các batch để an toàn
-            vectors.extend(batch_vectors)
-            
+
         print(f"Đã lưu vector lên Pinecone cho bài báo: {title} ({len(text_chunks)} chunks)")
         return paper_id
+
+    def add_document(self, doc_data: dict):
+        text = doc_data.get("text", "")
+        if not text:
+            return
+        text_chunks, embeddings = self.chunk_and_embed(text)
+        return self.upsert_chunks(doc_data, text_chunks, embeddings)
 
     def search(self, query_text, top_k=5, filename=None):
         # Chuyển câu hỏi thành Vector

@@ -105,7 +105,31 @@ function configureSettings() {
     }
   }
 
+  // 4. Nhập Backend Secret (tuỳ chọn - chỉ cần nếu Backend có bật BACKEND_SHARED_SECRET)
+  const currentSecret = userProperties.getProperty('BACKEND_SECRET') || '';
+  const secretResponse = ui.prompt(
+    'Cấu hình Backend Secret (Tuỳ chọn)',
+    `Chỉ cần điền nếu Backend của bạn có bật xác thực (biến môi trường BACKEND_SHARED_SECRET). Để trống nếu không dùng.\n(Hiện tại: ${currentSecret ? '✅ Đã lưu' : 'Chưa thiết lập'}):`,
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (secretResponse.getSelectedButton() === ui.Button.OK) {
+    const newSecret = secretResponse.getResponseText().trim();
+    if (newSecret) {
+      userProperties.setProperty('BACKEND_SECRET', newSecret);
+    }
+  }
+
   ui.alert('✅ Đã lưu cấu hình thành công! Thông tin này sẽ được bảo mật và dùng cho các lần chạy sau.');
+}
+
+// Header dùng chung cho mọi lệnh gọi UrlFetchApp tới Backend: thêm X-Backend-Secret
+// nếu người dùng đã cấu hình (Backend chỉ kiểm tra header này khi có bật
+// BACKEND_SHARED_SECRET, nên không cấu hình gì thì hành vi vẫn như cũ).
+function getBackendHeaders() {
+  const secret = PropertiesService.getUserProperties().getProperty('BACKEND_SECRET');
+  const headers = { 'ngrok-skip-browser-warning': '69420' };
+  if (secret) headers['X-Backend-Secret'] = secret;
+  return headers;
 }
 
 // =================================================================
@@ -143,12 +167,14 @@ function showCurrentSettings() {
   const folderId = userProperties.getProperty('FOLDER_ID');
   const backendUrl = userProperties.getProperty('BACKEND_URL');
   const pineconeKey = userProperties.getProperty('PINECONE_API_KEY');
+  const backendSecret = userProperties.getProperty('BACKEND_SECRET');
 
   const message = `📌 THÔNG TIN CẤU HÌNH HIỆN TẠI:\n\n` +
     `• Gemini API Key: ${apiKey ? '✅ Đã lưu (***' + apiKey.slice(-4) + ')' : '❌ Chưa thiết lập'}\n` +
     `• Pinecone API Key: ${pineconeKey ? '✅ Đã lưu (***' + pineconeKey.slice(-4) + ')' : '❌ Chưa thiết lập'}\n` +
     `• Drive Folder ID: ${folderId ? '✅ ' + folderId : '❌ Chưa thiết lập'}\n` +
-    `• Backend URL: ${backendUrl ? '✅ ' + backendUrl : '❌ Chưa thiết lập'}`;
+    `• Backend URL: ${backendUrl ? '✅ ' + backendUrl : '❌ Chưa thiết lập'}\n` +
+    `• Backend Secret: ${backendSecret ? '✅ Đã lưu (tuỳ chọn)' : '➖ Chưa thiết lập (tuỳ chọn)'}`;
 
   ui.alert(message);
 }
@@ -388,7 +414,7 @@ function checkPendingJobs() {
     try {
       response = UrlFetchApp.fetch(`${backendUrl}/api/jobs/${job.jobId}`, {
         method: "get",
-        headers: { 'ngrok-skip-browser-warning': '69420' },
+        headers: getBackendHeaders(),
         muteHttpExceptions: true
       });
     } catch (e) {
@@ -510,7 +536,7 @@ function processNewDocuments() {
         const response = UrlFetchApp.fetch(backendUrl + "/api/jobs/analyze-text", {
           method: "post",
           contentType: "application/json",
-          headers: { 'ngrok-skip-browser-warning': '69420' },
+          headers: getBackendHeaders(),
           payload: JSON.stringify(payload),
           muteHttpExceptions: true
         });
@@ -632,7 +658,7 @@ function processChat(question, useSpecificFile = false) {
   const response = UrlFetchApp.fetch(backendUrl + "/api/chat", {
     method: "post",
     contentType: "application/json",
-    headers: { 'ngrok-skip-browser-warning': '69420' },
+    headers: getBackendHeaders(),
     payload: JSON.stringify(payload),
     muteHttpExceptions: true
   });
@@ -652,11 +678,12 @@ function processChat(question, useSpecificFile = false) {
 // =================================================================
 // ⚙️ 9. ĐỒNG BỘ CẤU HÌNH TỪ WEB APP XUỐNG SHEETS
 // =================================================================
-function saveConfigToProperties(backendUrl, geminiKey, pineconeKey) {
+function saveConfigToProperties(backendUrl, geminiKey, pineconeKey, backendSecret) {
   const userProperties = PropertiesService.getUserProperties();
   if (backendUrl) userProperties.setProperty('BACKEND_URL', backendUrl);
   if (geminiKey) userProperties.setProperty('GEMINI_API_KEY', geminiKey);
   if (pineconeKey) userProperties.setProperty('PINECONE_API_KEY', pineconeKey);
+  if (backendSecret) userProperties.setProperty('BACKEND_SECRET', backendSecret);
   return true;
 }
 // =================================================================
@@ -714,7 +741,7 @@ function processDocumentsAdvanced() {
 
         const response = UrlFetchApp.fetch(backendUrl + "/api/jobs/analyze-pdf", {
           method: "post",
-          headers: { 'ngrok-skip-browser-warning': '69420' },
+          headers: getBackendHeaders(),
           payload: payload,
           muteHttpExceptions: true
         });
@@ -833,7 +860,7 @@ function generateMatrixSynthesis() {
     const response = UrlFetchApp.fetch(backendUrl + "/api/synthesis", {
       method: "post",
       contentType: "application/json",
-      headers: { 'ngrok-skip-browser-warning': '69420' },
+      headers: getBackendHeaders(),
       payload: JSON.stringify(payload),
       muteHttpExceptions: true
     });

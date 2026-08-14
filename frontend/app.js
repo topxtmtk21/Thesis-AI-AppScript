@@ -47,9 +47,7 @@ async function loadDocuments() {
         });
         
         const response = await fetch(`${backendUrl}/api/documents?` + params.toString(), {
-            headers: {
-                'ngrok-skip-browser-warning': '69420'
-            }
+            headers: getBackendHeaders()
         });
         const data = await response.json();
 
@@ -131,10 +129,7 @@ async function sendMessage() {
     try {
         const response = await fetch(`${backendUrl}/api/chat`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'ngrok-skip-browser-warning': '69420'
-            },
+            headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ 
                 question: text, 
                 api_key: geminiKey,
@@ -168,16 +163,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const savedBackend = localStorage.getItem('backend_url');
     const savedGemini = localStorage.getItem('gemini_key');
     const savedPinecone = localStorage.getItem('pinecone_key');
-    
+    const savedSecret = localStorage.getItem('backend_secret');
+
     if (savedBackend) document.getElementById('global-backend-url').value = savedBackend;
     if (savedGemini) document.getElementById('global-gemini-key').value = savedGemini;
     if (savedPinecone) document.getElementById('global-pinecone-key').value = savedPinecone;
+    if (savedSecret) document.getElementById('global-backend-secret').value = savedSecret;
 });
 
-function saveConfigToLocal(backendUrl, geminiKey, pineconeKey) {
+function saveConfigToLocal(backendUrl, geminiKey, pineconeKey, backendSecret) {
     if (backendUrl) localStorage.setItem('backend_url', backendUrl);
     if (geminiKey) localStorage.setItem('gemini_key', geminiKey);
     if (pineconeKey) localStorage.setItem('pinecone_key', pineconeKey);
+    if (backendSecret) localStorage.setItem('backend_secret', backendSecret);
+}
+
+// Header dùng chung cho mọi fetch() tới Backend: thêm X-Backend-Secret nếu người dùng
+// đã cấu hình (Backend chỉ kiểm tra header này khi có bật BACKEND_SHARED_SECRET, nên
+// không cấu hình gì thì hành vi vẫn như cũ).
+function getBackendHeaders(extra) {
+    const secret = localStorage.getItem('backend_secret');
+    const headers = Object.assign({ 'ngrok-skip-browser-warning': '69420' }, extra || {});
+    if (secret) headers['X-Backend-Secret'] = secret;
+    return headers;
 }
 
 // Modal & Toast Logic
@@ -193,14 +201,15 @@ function saveSettings() {
     const backend = document.getElementById('global-backend-url').value.trim();
     const gemini = document.getElementById('global-gemini-key').value.trim();
     const pinecone = document.getElementById('global-pinecone-key').value.trim();
-    
-    saveConfigToLocal(backend, gemini, pinecone);
-    
+    const backendSecret = document.getElementById('global-backend-secret').value.trim();
+
+    saveConfigToLocal(backend, gemini, pinecone, backendSecret);
+
     // Đồng bộ cấu hình sang Google Sheets
     if (typeof google !== 'undefined' && google.script && google.script.run) {
         google.script.run.withSuccessHandler(() => {
             console.log("Synced to Sheets");
-        }).saveConfigToProperties(backend, gemini, pinecone);
+        }).saveConfigToProperties(backend, gemini, pinecone, backendSecret);
     }
 
     closeSettings();
@@ -257,10 +266,7 @@ async function exportDocs(format) {
         showToast(`Đang tải file ${format.toUpperCase()}...`, "warning");
         const response = await fetch(`${backendUrl}/api/export`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'ngrok-skip-browser-warning': '69420'
-            },
+            headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ format: format, documents: docs })
         });
         
@@ -294,10 +300,7 @@ async function exportRis() {
     for (const doc of docs) {
         const res = await fetch(`${backendUrl}/api/export-ris`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'ngrok-skip-browser-warning': '69420'
-            },
+            headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({
                 authors: doc.authors || doc.author || "Unknown",
                 year: doc.year || "",
@@ -373,9 +376,7 @@ async function uploadFile(file) {
     try {
         const submitResponse = await fetch(`${backendUrl}/api/jobs/analyze-pdf`, {
             method: 'POST',
-            headers: {
-                'ngrok-skip-browser-warning': '69420'
-            },
+            headers: getBackendHeaders(),
             body: formData
         });
 
@@ -393,7 +394,7 @@ async function uploadFile(file) {
             await sleep(5000);
 
             const pollResponse = await fetch(`${backendUrl}/api/jobs/${job_id}`, {
-                headers: { 'ngrok-skip-browser-warning': '69420' }
+                headers: getBackendHeaders()
             });
 
             if (pollResponse.status === 404) {

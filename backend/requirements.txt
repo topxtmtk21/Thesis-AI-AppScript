@@ -1,19 +1,20 @@
-google-api-python-client
-google-auth-httplib2
-google-auth-oauthlib
-google-genai
-pinecone
-networkx
-pyvis
-pandas
-fastapi
-uvicorn
-pydantic
-PyMuPDF
-python-docx
-openpyxl
+google-api-python-client==2.198.0
+google-auth==2.56.3
+google-auth-httplib2==0.4.1
+google-auth-oauthlib==1.4.0
+google-genai==2.18.1
+pinecone==9.1.0
+networkx==3.6.1
+pyvis==0.3.2
+pandas==3.0.5
+fastapi==0.141.1
+uvicorn==0.52.2
+pydantic==2.13.4
+PyMuPDF==1.28.2
+python-docx==1.2.0
+openpyxl==3.1.5
 
-tenacity
-langchain-text-splitters
+tenacity==9.1.4
+langchain-text-splitters==1.1.2
 
-python-multipart
+python-multipart==0.0.32
