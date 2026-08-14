@@ -160,44 +160,57 @@ function setupSheet() {
   
   const headers = [
     [
-      "Tên File", 
-      "Tác giả & Năm", 
-      "Tạp chí/NXB",
+      "Nguồn dữ liệu", 
+      "Phương thức", 
+      "File đính kèm (PDF)",
+      "Tác giả", 
+      "Năm xuất bản", 
+      "Tựa đề bài báo",
+      "Tạp chí/Hội nghị",
       "Trích dẫn APA 7th", 
       "Khung lý thuyết", 
       "Phương pháp nghiên cứu",
       "Cỡ mẫu (Sample)",
       "Kết quả chính",
-      "Research Gap", 
+      "Khoảng trống nghiên cứu (Research Gap)", 
       "Hạn chế (Limitations)",
-      "Trích dẫn gốc (Ngoại ngữ)",
-      "Trích dẫn (Dịch tiếng Việt)",
-      "Danh mục Tham khảo (References)"
+      "Phát hiện chuyên sâu",
+      "Trích dẫn gốc (Tiếng Anh)",
+      "Bản dịch Tiếng Việt"
     ]
   ];
   
-  const range = sheet.getRange(1, 1, 1, 13);
+  const range = sheet.getRange(1, 1, 1, 17);
   range.setValues(headers);
   
   range.setFontWeight("bold")
        .setBackground("#d9ead3")
-       .setHorizontalAlignment("center");
+       .setHorizontalAlignment("center")
+       .setVerticalAlignment("middle")
+       .setWrap(true);
        
-  sheet.setColumnWidth(1, 150);
-  sheet.setColumnWidth(2, 120);
-  sheet.setColumnWidth(3, 150);
-  sheet.setColumnWidth(4, 250);
-  sheet.setColumnWidth(5, 200);
-  sheet.setColumnWidth(6, 150);
-  sheet.setColumnWidth(7, 100);
-  sheet.setColumnWidth(8, 200);
-  sheet.setColumnWidth(9, 200);
-  sheet.setColumnWidth(10, 200);
-  sheet.setColumnWidth(11, 250);
-  sheet.setColumnWidth(12, 250);
-  sheet.setColumnWidth(13, 300);
+  sheet.setColumnWidth(1, 120); // Nguồn
+  sheet.setColumnWidth(2, 100); // Phương thức
+  sheet.setColumnWidth(3, 150); // File đính kèm
+  sheet.setColumnWidth(4, 150); // Tác giả
+  sheet.setColumnWidth(5, 80);  // Năm
+  sheet.setColumnWidth(6, 250); // Tựa đề
+  sheet.setColumnWidth(7, 180); // Tạp chí
+  sheet.setColumnWidth(8, 250); // APA 7
+  sheet.setColumnWidth(9, 200); // Lý thuyết
+  sheet.setColumnWidth(10, 200); // Phương pháp
+  sheet.setColumnWidth(11, 120); // Mẫu
+  sheet.setColumnWidth(12, 250); // Kết quả
+  sheet.setColumnWidth(13, 200); // Gap
+  sheet.setColumnWidth(14, 200); // Hạn chế
+  sheet.setColumnWidth(15, 300); // Phát hiện sâu
+  sheet.setColumnWidth(16, 250); // Gốc
+  sheet.setColumnWidth(17, 250); // Dịch
   
-  SpreadsheetApp.getUi().alert("✅ Đã khởi tạo xong Bảng dữ liệu Luận án (Phiên bản Tiến sĩ)!");
+  // Đóng băng dòng 1
+  sheet.setFrozenRows(1);
+  
+  SpreadsheetApp.getUi().alert("✅ Đã khởi tạo xong Bảng dữ liệu Luận án (17 cột)!");
 }
 
 // =================================================================
@@ -400,7 +413,7 @@ function runDiagnostics() {
     return;
   }
   
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
   const payload = { "contents": [{ "parts": [{ "text": "Hello" }] }] };
   
   try {
@@ -806,95 +819,241 @@ function openNotebookLMDialog() {
 function processNotebookLMText(text) {
   const ui = SpreadsheetApp.getUi();
   const userProperties = PropertiesService.getUserProperties();
-  
   const apiKey = userProperties.getProperty('GEMINI_API_KEY');
-  const backendUrl = userProperties.getProperty('BACKEND_URL');
-  const pineconeKey = userProperties.getProperty('PINECONE_API_KEY');
 
-  if (!apiKey || !pineconeKey || !backendUrl) {
-    throw new Error("Bạn chưa cấu hình đủ API Key (Gemini, Pinecone) hoặc Backend URL!");
+  if (!apiKey) {
+    throw new Error("Bạn chưa cấu hình Gemini API Key trong phần Cài đặt!");
   }
 
   const sheetApp = SpreadsheetApp.getActiveSpreadsheet();
-  sheetApp.toast(`Đang gửi đoạn văn bản sang Backend để xử lý...`, 'Đang xử lý', -1);
+  sheetApp.toast(`Đang gọi trực tiếp Google Gemini để xử lý (Bỏ qua Backend)...`, 'Đang xử lý', -1);
   
+  const prompt = `Bạn là một trợ lý nghiên cứu học thuật chuyên nghiệp. Hãy đọc kỹ tài liệu này và trích xuất thông tin theo đúng cấu trúc dưới đây bằng Tiếng Việt (trừ những chỗ có yêu cầu dùng Tiếng Anh). 
+
+YÊU CẦU BẮT BUỘC (QUAN TRỌNG NHẤT): 
+Đối với mọi thông tin bạn trích xuất, bạn PHẢI đính kèm vị trí chính xác của thông tin đó trong ngoặc đơn ở cuối mỗi câu hoặc mỗi đoạn.
+- Nếu tài liệu có số trang: Ghi rõ số trang (VD: tr. 15, tr. 20-22). TUYỆT ĐỐI dùng chữ "tr." thay cho chữ "p.".
+- Nếu tài liệu không có số trang (HTML/Web): Ghi rõ tên Mục/Tiêu đề phần (VD: Mục Methodology, Đoạn 3 phần Discussion).
+Tuyệt đối không tự bịa thông tin, nếu tài liệu không có hãy ghi "Không đề cập".
+
+VĂN BẢN TRÍCH XUẤT TỪ NOTEBOOKLM:
+---------------------
+${text}
+---------------------
+
+Hãy điền thông tin vào định dạng JSON dưới đây. Nếu thông tin nào không có trong văn bản, hãy để trống "" hoặc [] nhưng KHÔNG được tự bịa ra.
+{
+  "authors": "Tác giả",
+  "year": "Năm xuất bản",
+  "authorYear": "Tên tác giả và năm xuất bản (VD: Smith et al., 2023)",
+  "title": "Tựa đề bài báo (Giữ nguyên Tiếng Anh)",
+  "journal": "Tên tạp chí/Hội nghị",
+  "apa7": "Trích dẫn chuẩn xác theo APA 7",
+  "theory": "Tóm tắt ngắn gọn lý thuyết nền tảng. BẮT BUỘC ghi rõ trang/phần",
+  "methodology": "Định lượng, định tính, hay hỗn hợp? Các công cụ phân tích là gì? BẮT BUỘC ghi rõ trang/phần",
+  "sampleSize": "Mô tả chi tiết số lượng, đối tượng, cách thức lấy mẫu. BẮT BUỘC ghi rõ trang/phần",
+  "keyFindings": "Liệt kê các kết quả quan trọng nhất, kèm số liệu thống kê nếu có. Mỗi kết quả BẮT BUỘC ghi rõ trang/phần",
+  "researchGap": "Bài báo này lấp đầy khoảng trống nào của các nghiên cứu đi trước? BẮT BUỘC ghi rõ trang/phần",
+  "limitations": "Tác giả tự nhận định những hạn chế nào? BẮT BUỘC ghi rõ trang/phần",
+  "detailedFindings": [
+    {
+      "content": "Nội dung phát hiện chuyên sâu... (Copy NGUYÊN VĂN từ văn bản nếu có)",
+      "location": "Trang X / Phần Y"
+    },
+    {
+      "content": "Nội dung phát hiện chuyên sâu số 2...",
+      "location": "Trang Z / Phần W"
+    }
+  ],
+  "originalQuote": "Copy NGUYÊN VĂN Tiếng Anh một câu/đoạn xuất sắc nhất. Ghi chính xác số trang/phần",
+  "translatedQuote": "Bản dịch câu trên sang Tiếng Việt mang văn phong học thuật",
+  "full_bibliography": ["Trích dẫn 1 chi tiết...", "Trích dẫn 2 chi tiết..."],
+  "references": ["Liệt kê 3-5 bài báo tham khảo quan trọng nhất mà bài báo này đã trích dẫn ở phần References"]
+}`;
+
   const payload = {
-    text: text,
-    api_key: apiKey,
-    pinecone_api_key: pineconeKey
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { responseMimeType: "application/json" }
   };
-  
+
   const options = {
-    method: 'post',
-    payload: payload,
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(payload),
     muteHttpExceptions: true
   };
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+  let response;
+  let responseCode;
+  let responseText;
+  let retries = 6;
+  let backoff = 3000; // start with 3s
   
-  try {
-    const backendUrlParsed = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
-    const response = UrlFetchApp.fetch(`${backendUrlParsed}/api/analyze-raw-text`, options);
-    const responseCode = response.getResponseCode();
-    const responseBody = response.getContentText();
-    
-    if (responseCode === 200) {
-      const data = JSON.parse(responseBody);
-      if (data.status === "success" && data.data) {
-        const result = data.data;
-        const sheet = sheetApp.getActiveSheet();
-        
-        let detailedFindingsStr = "";
-        if (result.detailedFindings && Array.isArray(result.detailedFindings)) {
-          detailedFindingsStr = result.detailedFindings.map(item => 
-            `[${item.location || 'N/A'}] ${item.content || ''}`
-          ).join('\n\n');
-        } else if (result.detailedFindings) {
-          detailedFindingsStr = String(result.detailedFindings);
-        }
-
-        let keyFindingsStr = result.keyFindings || "";
-        if (Array.isArray(keyFindingsStr)) {
-          keyFindingsStr = keyFindingsStr.join('\n');
-        }
-
-        const newRow = [
-          "Dán từ NotebookLM",
-          "Thủ công",
-          "", // PDF Link
-          result.authors || "",
-          result.year || "",
-          result.title || "",
-          result.journal || "",
-          result.apa7 || "",
-          result.theory || "",
-          result.methodology || "",
-          result.sampleSize || "",
-          keyFindingsStr,
-          result.researchGap || "",
-          result.limitations || "",
-          detailedFindingsStr,
-          result.originalQuote || "",
-          result.translatedQuote || ""
-        ];
-        
-        sheet.appendRow(newRow);
-        
-        sheetApp.toast(`Đã chèn dữ liệu thành công!`, 'Thành công', 5);
-        return {status: 'success'};
+  while (retries > 0) {
+    try {
+      response = UrlFetchApp.fetch(url, options);
+      responseCode = response.getResponseCode();
+      responseText = response.getContentText();
+      
+      if (responseCode === 200) {
+        break; // Success
+      } else if (responseCode === 503 || responseCode === 429) {
+        // Transient error or rate limit, retry
+        retries--;
+        if (retries === 0) throw new Error(`Lỗi từ Gemini API: ${responseText}`);
+        console.warn(`Gemini API overloaded (503/429). Retrying in ${backoff}ms... (${retries} retries left)`);
+        Utilities.sleep(backoff);
+        backoff *= 2; // 3s, 6s, 12s, 24s, 48s, 96s
       } else {
-        throw new Error(data.message || 'Lỗi không xác định từ Backend');
+        // Other errors (e.g. 400 Bad Request)
+        throw new Error(`Lỗi từ Gemini API: ${responseText}`);
       }
-    } else {
-      let errorMsg = `HTTP Error ${responseCode}`;
-      try {
-        const errObj = JSON.parse(responseBody);
-        errorMsg = errObj.detail || errObj.message || errorMsg;
-      } catch (e) {
-        errorMsg += `\n${responseBody}`;
+    } catch (e) {
+      if (retries === 0 || (!e.message.includes("503") && !e.message.includes("429") && !e.message.includes("timeout"))) {
+        throw new Error(`Lỗi kết nối Gemini API (Đã thử lại nhiều lần nhưng server AI vẫn quá tải): ${e.message}`);
       }
-      throw new Error(errorMsg);
+      retries--;
+      Utilities.sleep(backoff);
+      backoff *= 2;
     }
+  }
+    
+  try {
+    const jsonRes = JSON.parse(responseText);
+    if (!jsonRes.candidates || jsonRes.candidates.length === 0) {
+      throw new Error("Không có dữ liệu trả về từ Gemini. Có thể do chính sách an toàn.");
+    }
+    
+    const rawContent = jsonRes.candidates[0].content?.parts?.[0]?.text;
+    if (!rawContent) {
+      throw new Error("Dữ liệu trả về bị rỗng.");
+    }
+    
+    let result;
+    try {
+      result = JSON.parse(rawContent);
+    } catch(e) {
+      const cleaned = rawContent.replace(/```json/g, "").replace(/```/g, "").trim();
+      try {
+        result = JSON.parse(cleaned);
+      } catch (e2) {
+         throw new Error(`Không thể parse JSON từ phản hồi: ${cleaned.substring(0, 100)}...`);
+      }
+    }
+    
+    if (Array.isArray(result) && result.length > 0) {
+      result = result[0];
+    }
+    
+    const sheet = sheetApp.getActiveSheet();
+    
+    let detailedFindingsStr = "";
+    if (result.detailedFindings && Array.isArray(result.detailedFindings)) {
+      detailedFindingsStr = result.detailedFindings.map(item => 
+        `[${item.location || 'N/A'}] ${item.content || ''}`
+      ).join('\n\n');
+    } else if (result.detailedFindings) {
+      detailedFindingsStr = String(result.detailedFindings);
+    }
+
+    let keyFindingsStr = result.keyFindings || "";
+    if (Array.isArray(keyFindingsStr)) {
+      keyFindingsStr = keyFindingsStr.join('\n');
+    }
+
+    const newRow = [
+      "Dán từ NotebookLM",
+      "Thủ công",
+      "", // PDF Link
+      result.authors || "",
+      result.year || "",
+      result.title || "",
+      result.journal || "",
+      result.apa7 || "",
+      result.theory || "",
+      result.methodology || "",
+      result.sampleSize || "",
+      keyFindingsStr,
+      result.researchGap || "",
+      result.limitations || "",
+      detailedFindingsStr,
+      result.originalQuote || "",
+      result.translatedQuote || ""
+    ];
+    
+    sheet.appendRow(newRow);
+    sheetApp.toast(`Đã chèn dữ liệu thành công!`, 'Thành công', 5);
+    return {status: 'success'};
+
   } catch (e) {
-    sheetApp.toast(e.toString(), 'Lỗi Backend', 10);
+    sheetApp.toast(e.toString(), 'Lỗi', 10);
     throw e;
   }
 }
+
+// =================================================================
+// 🚀 13. TÍCH HỢP NOTEBOOKLM (Ghi dữ liệu từ Web App)
+// =================================================================
+function appendNotebookLMRow(result) {
+  try {
+    const sheetApp = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = sheetApp.getActiveSheet();
+    
+    let detailedFindingsStr = "";
+    if (result.detailedFindings && Array.isArray(result.detailedFindings)) {
+      detailedFindingsStr = result.detailedFindings.map(item => 
+        `[${item.location || 'N/A'}] ${item.content || ''}`
+      ).join('\n\n');
+    } else if (result.detailedFindings) {
+      detailedFindingsStr = String(result.detailedFindings);
+    }
+
+    let keyFindingsStr = result.keyFindings || "";
+    if (Array.isArray(keyFindingsStr)) {
+      keyFindingsStr = keyFindingsStr.join('\n');
+    }
+
+    const newRow = [
+      "Dán từ NotebookLM (Web App)",
+      "Thủ công",
+      "", // PDF Link
+      result.authors || "",
+      result.year || "",
+      result.title || "",
+      result.journal || "",
+      result.apa7 || "",
+      result.theory || "",
+      result.methodology || "",
+      result.sampleSize || "",
+      keyFindingsStr,
+      result.researchGap || "",
+      result.limitations || "",
+      detailedFindingsStr,
+      result.originalQuote || "",
+      result.translatedQuote || ""
+    ];
+    
+    sheet.appendRow(newRow);
+    
+    // Formatting thẩm mỹ cho dòng mới
+    const lastRow = sheet.getLastRow();
+    const newRange = sheet.getRange(lastRow, 1, 1, 17);
+    newRange.setWrap(true)
+            .setVerticalAlignment("top")
+            .setBorder(true, true, true, true, true, true, null, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+            
+    // Alternating colors
+    if (lastRow % 2 === 0) {
+      newRange.setBackground("#f8fafc"); // light slate
+    } else {
+      newRange.setBackground("#ffffff");
+    }
+
+    return { status: "success" };
+  } catch (error) {
+    throw new Error(error.message);
+  }
+}
+

@@ -7,7 +7,6 @@ import os
 
 from app.models.schemas import ExportRequest, ExportRisRequest, AnalyzeDocumentRequest, SynthesisRequest
 from app.services.export_service import DocumentExporter
-from app.services.pdf_service import PDFHighlighter
 from app.services.gemini_service import GeminiService
 from app.services.pinecone_service import PineconeManager
 from app.services.drive_service import DriveManager

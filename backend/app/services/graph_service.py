@@ -1,10 +1,36 @@
 import networkx as nx
 from pyvis.network import Network
+import json
 import os
 
 class KnowledgeGraphManager:
     def __init__(self):
         self.graph = nx.Graph()
+        self._data_path = self._get_data_path()
+        self._load_graph()
+
+    def _get_data_path(self):
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        data_dir = os.path.join(base_dir, 'backend', 'data')
+        os.makedirs(data_dir, exist_ok=True)
+        return os.path.join(data_dir, 'knowledge_graph.json')
+
+    def _load_graph(self):
+        # Nạp lại đồ thị đã lưu từ lần chạy trước để dữ liệu được tích lũy
+        # thay vì bị ghi đè mỗi khi có tài liệu mới được phân tích.
+        if os.path.exists(self._data_path):
+            try:
+                with open(self._data_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                self.graph = nx.node_link_graph(data, edges="edges")
+            except Exception as e:
+                print(f"Lỗi khi nạp Knowledge Graph đã lưu, bắt đầu đồ thị mới: {e}")
+                self.graph = nx.Graph()
+
+    def _persist_graph(self):
+        data = nx.node_link_data(self.graph, edges="edges")
+        with open(self._data_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False)
 
     def add_node(self, node_id, title=None, group="author"):
         if not self.graph.has_node(node_id):
@@ -41,6 +67,8 @@ class KnowledgeGraphManager:
         print(f"So do tri thuc da duoc tao tai: {os.path.abspath(output_path)}")
         
     def save_graph(self):
+        # Lưu trạng thái đồ thị (để lần sau nạp lại và tích lũy tiếp)
+        self._persist_graph()
         # Lưu file HTML đồ thị vào frontend/knowledge_graph.html
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         frontend_dir = os.path.join(base_dir, 'frontend')

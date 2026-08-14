@@ -6,694 +6,361 @@
     <title>Academic AI Dashboard</title>
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <!-- CSS -->
-    <style>
-:root {
-    --bg-dark: #0f172a;
-    --glass-bg: rgba(30, 41, 59, 0.7);
-    --glass-border: rgba(255, 255, 255, 0.1);
-    --text-main: #f8fafc;
-    --text-muted: #94a3b8;
-    --accent: #0ea5e9;
-    --accent-hover: #0284c7;
-}
-
-body {
-    font-family: 'Inter', sans-serif;
-    background-color: var(--bg-dark);
-    color: var(--text-main);
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    position: relative;
-}
-
-/* Background animated shapes */
-.bg-shape {
-    position: absolute;
-    filter: blur(100px);
-    z-index: -1;
-    animation: float 20s infinite alternate;
-}
-.bg-shape-1 {
-    width: 400px;
-    height: 400px;
-    background: rgba(14, 165, 233, 0.3);
-    top: -100px;
-    left: -100px;
-    border-radius: 50%;
-}
-.bg-shape-2 {
-    width: 500px;
-    height: 500px;
-    background: rgba(139, 92, 246, 0.2);
-    bottom: -150px;
-    right: -100px;
-    border-radius: 50%;
-    animation-delay: -5s;
-}
-
-@keyframes float {
-    0% { transform: translate(0, 0) scale(1); }
-    100% { transform: translate(50px, 50px) scale(1.1); }
-}
-
-/* Glassmorphism */
-.glass-panel {
-    background: var(--glass-bg);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid var(--glass-border);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-}
-
-.glass-input {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid var(--glass-border);
-    color: var(--text-main);
-    padding: 10px 15px;
-    border-radius: 8px;
-    outline: none;
-    width: 100%;
-    transition: border-color 0.3s;
-}
-.glass-input:focus {
-    border-color: var(--accent);
-}
-
-/* Layout */
-.app-container {
-    display: flex;
-    height: 100vh;
-}
-
-/* Sidebar */
-.sidebar {
-    width: 250px;
-    display: flex;
-    flex-direction: column;
-    padding: 20px 0;
-    border-right: 1px solid var(--glass-border);
-    border-radius: 0 20px 20px 0;
-    z-index: 10;
-}
-
-.logo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 0 24px;
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--text-main);
-    margin-bottom: 40px;
-}
-.logo i {
-    color: var(--accent);
-    font-size: 24px;
-}
-
-.nav-links {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-.nav-links li {
-    padding: 16px 24px;
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    cursor: pointer;
-    color: var(--text-muted);
-    transition: all 0.3s;
-    border-left: 3px solid transparent;
-}
-.nav-links li:hover {
-    color: var(--text-main);
-    background: rgba(255,255,255,0.05);
-}
-.nav-links li.active {
-    color: var(--text-main);
-    background: rgba(14, 165, 233, 0.1);
-    border-left-color: var(--accent);
-}
-
-/* Main Content */
-.main-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    padding: 20px 30px;
-    overflow: hidden;
-}
-
-.topbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 15px 25px;
-    border-radius: 16px;
-    margin-bottom: 20px;
-}
-
-.topbar h2 {
-    margin: 0;
-    font-size: 1.25rem;
-    font-weight: 600;
-}
-
-.avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: var(--accent);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-}
-
-/* Views */
-.view-section {
-    display: none;
-    flex: 1;
-    animation: fadeIn 0.4s ease-in-out;
-}
-.view-section.active {
-    display: flex;
-    flex-direction: column;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-.table-container {
-    flex: 1;
-    border-radius: 16px;
-    overflow-y: auto;
-    padding: 20px;
-}
-.graph-container {
-    flex: 1;
-    border-radius: 16px;
-    overflow: hidden;
-}
-.graph-container iframe {
-    width: 100%;
-    height: 100%;
-    border: none;
-}
-
-/* Table */
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-th, td {
-    padding: 15px;
-    text-align: left;
-    border-bottom: 1px solid var(--glass-border);
-}
-th {
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    font-size: 0.85rem;
-    letter-spacing: 0.5px;
-}
-tbody tr {
-    transition: background 0.3s;
-}
-tbody tr:hover {
-    background: rgba(255,255,255,0.05);
-}
-
-/* Floating Chatbot */
-.chat-widget {
-    position: fixed;
-    bottom: 30px;
-    right: 30px;
-    z-index: 100;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-}
-
-.chat-toggle-btn {
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    background: var(--accent);
-    color: white;
-    border: none;
-    font-size: 24px;
-    cursor: pointer;
-    box-shadow: 0 4px 20px rgba(14, 165, 233, 0.4);
-    transition: transform 0.3s, background 0.3s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.chat-toggle-btn:hover {
-    transform: scale(1.1);
-    background: var(--accent-hover);
-}
-
-.chat-window {
-    width: 350px;
-    height: 500px;
-    border-radius: 20px;
-    margin-bottom: 20px;
-    display: none;
-    flex-direction: column;
-    overflow: hidden;
-    transform-origin: bottom right;
-    animation: chatOpen 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-.chat-window.active {
-    display: flex;
-}
-
-@keyframes chatOpen {
-    from { opacity: 0; transform: scale(0.5); }
-    to { opacity: 1; transform: scale(1); }
-}
-
-.chat-header {
-    padding: 15px 20px;
-    border-bottom: 1px solid var(--glass-border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: rgba(0,0,0,0.2);
-}
-.chat-header h3 {
-    margin: 0;
-    font-size: 1rem;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.chat-header button {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    font-size: 1.2rem;
-    cursor: pointer;
-    transition: color 0.3s;
-}
-.chat-header button:hover {
-    color: var(--text-main);
-}
-
-.chat-body {
-    flex: 1;
-    padding: 15px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-.chat-body::-webkit-scrollbar {
-    width: 6px;
-}
-.chat-body::-webkit-scrollbar-thumb {
-    background: var(--glass-border);
-    border-radius: 10px;
-}
-
-.message {
-    padding: 12px 16px;
-    border-radius: 16px;
-    max-width: 85%;
-    font-size: 0.95rem;
-    line-height: 1.5;
-    animation: fadeIn 0.3s ease;
-}
-.message.bot {
-    background: rgba(255, 255, 255, 0.1);
-    align-self: flex-start;
-    border-bottom-left-radius: 4px;
-}
-.message.user {
-    background: var(--accent);
-    color: white;
-    align-self: flex-end;
-    border-bottom-right-radius: 4px;
-}
-
-.chat-input-area {
-    padding: 15px;
-    border-top: 1px solid var(--glass-border);
-    background: rgba(0,0,0,0.2);
-}
-
-.send-btn {
-    background: var(--accent);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    padding: 0 15px;
-    cursor: pointer;
-    transition: background 0.3s;
-}
-.send-btn:hover {
-    background: var(--accent-hover);
-}
-
-/* --- NEW PREMIUM UI STYLES --- */
-h1, h2, h3, h4, h5, h6, .logo {
-    font-family: 'Outfit', sans-serif;
-}
-
-.settings-btn {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-main);
-    border: 1px solid var(--glass-border);
-    border-radius: 8px;
-    padding: 8px 15px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    font-weight: 500;
-}
-.settings-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.3);
-}
-
-.send-btn {
-    background: linear-gradient(135deg, #0ea5e9, #8b5cf6);
-    box-shadow: 0 4px 15px rgba(14, 165, 233, 0.3);
-    border: none;
-    font-weight: 500;
-}
-.send-btn:hover {
-    background: linear-gradient(135deg, #0284c7, #7c3aed);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(14, 165, 233, 0.5);
-}
-
-/* Modal System */
-.modal-overlay {
-    position: fixed;
-    top: 0; left: 0; width: 100vw; height: 100vh;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(5px);
-    z-index: 1000;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-.modal-overlay.active {
-    display: flex;
-    opacity: 1;
-}
-.modal-content {
-    width: 450px;
-    border-radius: 20px;
-    padding: 0;
-    overflow: hidden;
-    transform: translateY(20px);
-    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-.modal-overlay.active .modal-content {
-    transform: translateY(0);
-}
-.modal-header {
-    padding: 20px 25px;
-    background: rgba(255, 255, 255, 0.05);
-    border-bottom: 1px solid var(--glass-border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-.modal-header h3 {
-    margin: 0;
-    font-size: 1.2rem;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.modal-header button {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    font-size: 1.2rem;
-    cursor: pointer;
-    transition: color 0.3s;
-}
-.modal-header button:hover {
-    color: var(--text-main);
-}
-.modal-body {
-    padding: 25px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-}
-.form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-.form-group label {
-    font-size: 0.9rem;
-    color: var(--text-muted);
-    font-weight: 500;
-}
-.modal-footer {
-    padding: 15px 25px;
-    background: rgba(0, 0, 0, 0.2);
-    border-top: 1px solid var(--glass-border);
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-}
-.cancel-btn {
-    background: transparent;
-    color: var(--text-main);
-    border: 1px solid var(--glass-border);
-    border-radius: 8px;
-    padding: 8px 20px;
-    cursor: pointer;
-    transition: all 0.3s;
-}
-.cancel-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-}
-.save-btn {
-    background: linear-gradient(135deg, #10b981, #059669);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    padding: 8px 20px;
-    cursor: pointer;
-    font-weight: 600;
-    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
-    transition: all 0.3s;
-}
-.save-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
-}
-
-/* Toast Notifications */
-#toast-container {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 2000;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-.toast {
-    min-width: 250px;
-    padding: 15px 20px;
-    border-radius: 10px;
-    background: rgba(30, 41, 59, 0.9);
-    backdrop-filter: blur(10px);
-    border-left: 4px solid var(--accent);
-    color: white;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    animation: slideInRight 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-.toast.success { border-left-color: #10b981; }
-.toast.error { border-left-color: #ef4444; }
-.toast.warning { border-left-color: #f59e0b; }
-
-@keyframes slideInRight {
-    from { transform: translateX(100%); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
-}
-@keyframes fadeOut {
-    to { opacity: 0; transform: translateY(-10px); }
-}
-
-/* Dropzone pulse animation */
-@keyframes pulseGlow {
-    0% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.4); }
-    70% { box-shadow: 0 0 0 15px rgba(14, 165, 233, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0); }
-}
-#drop-zone {
-    transition: all 0.3s ease;
-}
-#drop-zone:hover {
-    border-color: var(--accent);
-    background: rgba(14, 165, 233, 0.05);
-    animation: pulseGlow 2s infinite;
-}
-
-</style>
-    <!-- FontAwesome for Icons -->
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        heading: ['Outfit', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            900: '#0c4a6e',
+                        },
+                        dark: {
+                            900: '#0f172a',
+                            800: '#1e293b',
+                            700: '#334155',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            overflow: hidden;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        .glass-input {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            transition: all 0.3s;
+        }
+        .glass-input:focus {
+            outline: none;
+            border-color: #0ea5e9;
+            box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2);
+        }
+        .view-section {
+            display: none;
+            animation: fadeIn 0.4s ease;
+        }
+        .view-section.active {
+            display: flex;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(6px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.2s ease;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        
+        /* Toast */
+        #toast-container {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .toast {
+            padding: 14px 28px;
+            border-radius: 12px;
+            color: white;
+            font-weight: 500;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+            animation: slideUp 0.3s ease forwards;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .toast-success { background: linear-gradient(to right, #059669, #10b981); }
+        .toast-error { background: linear-gradient(to right, #dc2626, #ef4444); border-left: 4px solid #991b1b; }
+        .toast-warning { background: linear-gradient(to right, #d97706, #f59e0b); }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
 </head>
-<body>
-    <!-- Nền sinh động -->
-    <div class="bg-shape bg-shape-1"></div>
-    <div class="bg-shape bg-shape-2"></div>
+<body class="flex h-screen antialiased selection:bg-brand-500 selection:text-white relative">
+    
+    <!-- Background Accents -->
+    <div class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-brand-500/20 rounded-full blur-[100px] pointer-events-none"></div>
+    <div class="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-purple-500/10 rounded-full blur-[120px] pointer-events-none"></div>
 
-    <div class="app-container">
+    <div id="app" class="flex w-full h-full relative z-10">
         <!-- Sidebar -->
-        <nav class="sidebar glass-panel">
-            <div class="logo">
-                <i class="fa-solid fa-atom"></i>
-                <span>Academic AI</span>
+        <nav class="sidebar glass-panel w-72 flex flex-col border-r border-white/5 shadow-2xl z-20 transition-all duration-300">
+            <div class="logo flex items-center gap-4 px-8 py-10">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center shadow-lg shadow-brand-500/30">
+                    <i class="fa-solid fa-microchip text-white text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-heading font-bold text-2xl leading-tight tracking-wide text-white">Thesis<span class="text-brand-500">AI</span></h1>
+                    <p class="text-[11px] text-slate-400 font-medium tracking-wider uppercase mt-1">Pro Dashboard</p>
+                </div>
             </div>
-            <ul class="nav-links">
-                <li class="active" onclick="switchTab('documents')">
-                    <i class="fa-solid fa-file-lines"></i>
-                    <span>Tài liệu đã lưu</span>
+            
+            <ul class="nav-links flex-1 px-4 py-2 space-y-2 overflow-y-auto">
+                <li class="px-5 py-3.5 rounded-xl cursor-pointer flex items-center gap-4 text-slate-300 hover:text-white hover:bg-white/5 transition-colors active" onclick="switchTab('documents')">
+                    <i class="fa-solid fa-table-list w-6 text-center text-lg"></i>
+                    <span class="font-medium text-[15px]">Kho Dữ Liệu</span>
                 </li>
-                <li onclick="switchTab('upload')">
-                    <i class="fa-solid fa-cloud-arrow-up"></i>
-                    <span>Tải lên (Upload)</span>
+                <li class="px-5 py-3.5 rounded-xl cursor-pointer flex items-center gap-4 text-slate-300 hover:text-white hover:bg-white/5 transition-colors" onclick="switchTab('upload')">
+                    <i class="fa-solid fa-cloud-arrow-up w-6 text-center text-lg"></i>
+                    <span class="font-medium text-[15px]">Tải PDF Lên</span>
                 </li>
-                <li onclick="switchTab('graph')">
-                    <i class="fa-solid fa-diagram-project"></i>
-                    <span>Đồ thị Tri thức</span>
+                <li class="px-5 py-3.5 rounded-xl cursor-pointer flex items-center gap-4 text-slate-300 hover:text-white hover:bg-white/5 transition-colors" onclick="switchTab('graph')">
+                    <i class="fa-solid fa-diagram-project w-6 text-center text-lg"></i>
+                    <span class="font-medium text-[15px]">Knowledge Graph</span>
+                </li>
+                <div class="my-6 mx-5 h-px bg-white/10"></div>
+                <li class="px-5 py-3.5 rounded-xl cursor-pointer flex items-center gap-4 text-brand-400 hover:text-brand-300 hover:bg-brand-500/15 transition-colors bg-brand-500/5" onclick="switchTab('notebooklm')">
+                    <i class="fa-solid fa-bolt w-6 text-center text-lg"></i>
+                    <span class="font-medium text-[15px]">Nhập NotebookLM</span>
                 </li>
             </ul>
+            
+            <div class="p-6 mt-auto">
+                <div class="bg-dark-800/60 rounded-2xl p-4 border border-white/5 flex items-center gap-3 shadow-inner">
+                    <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse"></div>
+                    <span class="text-sm text-slate-300 font-medium">Hệ thống sẵn sàng</span>
+                </div>
+            </div>
         </nav>
 
         <!-- Main Content -->
-        <main class="main-content">
+        <main class="flex-1 flex flex-col p-8 overflow-hidden gap-6">
             <!-- Header -->
-            <header class="topbar glass-panel">
-                <h2 id="page-title">Tài liệu đã lưu</h2>
-                <div class="user-profile" style="display:flex; gap:10px; align-items:center;">
-                    <button class="settings-btn" onclick="openSettings()"><i class="fa-solid fa-gear"></i> Cài đặt</button>
-                    <button class="send-btn" onclick="loadDocuments()"><i class="fa-solid fa-rotate"></i> Load</button>
-                    <div class="avatar">
-                        <i class="fa-solid fa-user-graduate"></i>
+            <header class="glass-panel rounded-2xl px-8 py-5 flex justify-between items-center border border-white/5 shadow-lg shrink-0">
+                <h2 id="page-title" class="font-heading font-semibold text-2xl text-white tracking-wide">Tài liệu Đã lưu</h2>
+                <div class="flex items-center gap-4">
+                    <button class="px-5 py-2.5 rounded-xl bg-dark-800/80 hover:bg-dark-700 text-slate-300 hover:text-white text-sm font-medium transition-colors border border-white/10 flex items-center gap-2.5" onclick="openSettings()">
+                        <i class="fa-solid fa-gear"></i> Cài đặt
+                    </button>
+                    <button class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white text-sm font-medium transition-colors shadow-lg shadow-brand-500/25 flex items-center gap-2.5" onclick="loadDocuments()">
+                        <i class="fa-solid fa-rotate"></i> Làm mới
+                    </button>
+                    <div class="w-11 h-11 rounded-full bg-gradient-to-tr from-slate-700 to-slate-600 border border-slate-500 flex items-center justify-center overflow-hidden ml-2 shadow-md">
+                        <i class="fa-solid fa-user-graduate text-slate-300"></i>
                     </div>
                 </div>
             </header>
 
             <!-- Documents View -->
-            <section id="view-documents" class="view-section active">
-                <div class="table-container glass-panel">
-                    <div style="margin-bottom: 10px; display: flex; gap: 10px;">
-                        <button class="send-btn" onclick="exportDocs('md')"><i class="fa-brands fa-markdown"></i> Xuất .MD</button>
-                        <button class="send-btn" onclick="exportDocs('docx')"><i class="fa-solid fa-file-word"></i> Xuất .DOCX</button>
-                        <button class="send-btn" onclick="exportDocs('xlsx')"><i class="fa-solid fa-file-excel"></i> Xuất .XLSX</button>
-                        <button class="send-btn" onclick="exportRis()"><i class="fa-solid fa-book-bookmark"></i> Xuất RIS (Zotero)</button>
+            <section id="view-documents" class="view-section active flex-col flex-1 min-h-0">
+                <div class="glass-panel rounded-2xl flex flex-col flex-1 overflow-hidden border border-white/5 shadow-xl">
+                    <div class="px-6 py-4 border-b border-white/10 bg-dark-800/40 flex flex-wrap gap-4 items-center justify-between">
+                        <div class="flex gap-3">
+                            <button class="px-4 py-2 rounded-lg bg-dark-700/80 hover:bg-dark-600 text-slate-200 text-sm font-medium transition-colors border border-white/5 flex items-center gap-2 hover:shadow-md" onclick="exportDocs('md')">
+                                <i class="fa-brands fa-markdown text-brand-400 text-base"></i> Markdown
+                            </button>
+                            <button class="px-4 py-2 rounded-lg bg-dark-700/80 hover:bg-dark-600 text-slate-200 text-sm font-medium transition-colors border border-white/5 flex items-center gap-2 hover:shadow-md" onclick="exportDocs('docx')">
+                                <i class="fa-solid fa-file-word text-blue-400 text-base"></i> Word
+                            </button>
+                            <button class="px-4 py-2 rounded-lg bg-dark-700/80 hover:bg-dark-600 text-slate-200 text-sm font-medium transition-colors border border-white/5 flex items-center gap-2 hover:shadow-md" onclick="exportDocs('xlsx')">
+                                <i class="fa-solid fa-file-excel text-emerald-400 text-base"></i> Excel
+                            </button>
+                        </div>
+                        <button class="px-4 py-2 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 text-sm font-medium transition-colors border border-orange-500/20 flex items-center gap-2" onclick="exportRis()">
+                            <i class="fa-solid fa-book-bookmark"></i> RIS (Zotero)
+                        </button>
                     </div>
-                    <table id="docs-table">
-                        <thead>
-                            <tr>
-                                <th><input type="checkbox" id="select-all" onclick="toggleSelectAll()"></th>
-                                <th>Tên File</th>
-                                <th>Tác giả</th>
-                                <th>Lý thuyết</th>
-                                <th>Phương pháp</th>
-                                <th>Hành động</th>
-                            </tr>
-                        </thead>
-                        <tbody id="docs-body">
-                            <!-- Data will be loaded here via JS -->
-                            <tr><td colspan="5" style="text-align:center;">Đang tải dữ liệu...</td></tr>
-                        </tbody>
-                    </table>
+                    
+                    <div class="flex-1 overflow-auto p-0">
+                        <table class="w-full text-left border-collapse text-[15px] whitespace-nowrap">
+                            <thead class="bg-dark-800/90 sticky top-0 z-10 shadow-sm backdrop-blur-md">
+                                <tr>
+                                    <th class="px-6 py-4 font-semibold text-slate-300 border-b border-white/10 w-14 text-center">
+                                        <input type="checkbox" id="select-all" onclick="toggleSelectAll()" class="w-4 h-4 rounded border-slate-600 bg-dark-700 accent-brand-500 cursor-pointer">
+                                    </th>
+                                    <th class="px-6 py-4 font-semibold text-slate-300 border-b border-white/10 tracking-wide">Tên File</th>
+                                    <th class="px-6 py-4 font-semibold text-slate-300 border-b border-white/10 tracking-wide">Tác giả</th>
+                                    <th class="px-6 py-4 font-semibold text-slate-300 border-b border-white/10 tracking-wide">Lý thuyết</th>
+                                    <th class="px-6 py-4 font-semibold text-slate-300 border-b border-white/10 tracking-wide">Phương pháp</th>
+                                    <th class="px-6 py-4 font-semibold text-slate-300 border-b border-white/10 tracking-wide text-center">Hành động</th>
+                                </tr>
+                            </thead>
+                            <tbody id="docs-body" class="divide-y divide-white/5">
+                                <tr><td colspan="6" class="px-6 py-16 text-center text-slate-400">Đang tải dữ liệu...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
 
             <!-- Upload View -->
-            <section id="view-upload" class="view-section">
-                <div class="glass-panel" style="padding: 30px; text-align: center; border: 2px dashed rgba(255, 255, 255, 0.4); border-radius: 15px;" id="drop-zone" ondragover="event.preventDefault()" ondrop="handleDrop(event)">
-                    <i class="fa-solid fa-cloud-arrow-up" style="font-size: 48px; color: var(--primary); margin-bottom: 15px;"></i>
-                    <h3>Kéo thả file PDF vào đây</h3>
-                    <p style="color: var(--text-muted); margin-top: 10px;">Hoặc</p>
-                    <input type="file" id="file-upload" accept=".pdf" style="display: none;" onchange="handleFileSelect(event)">
-                    <button class="send-btn" style="margin-top: 15px;" onclick="document.getElementById('file-upload').click()">Chọn file từ máy tính</button>
+            <section id="view-upload" class="view-section flex-col flex-1 justify-center items-center h-full min-h-0">
+                <div class="w-full max-w-3xl glass-panel rounded-3xl p-12 text-center border-2 border-dashed border-slate-600/60 hover:border-brand-500/80 transition-all cursor-pointer bg-dark-800/20 hover:bg-dark-800/40" id="drop-zone" ondragover="event.preventDefault()" ondrop="handleDrop(event)" onclick="document.getElementById('file-upload').click()">
+                    <div class="w-24 h-24 bg-gradient-to-br from-brand-500/10 to-purple-500/10 rounded-2xl flex items-center justify-center mx-auto mb-8 shadow-inner border border-white/5">
+                        <i class="fa-solid fa-cloud-arrow-up text-5xl text-brand-400 drop-shadow-md"></i>
+                    </div>
+                    <h3 class="font-heading text-3xl font-semibold text-white mb-3 tracking-wide">Kéo thả file PDF vào đây</h3>
+                    <p class="text-slate-400 text-lg mb-10">hoặc click để chọn file từ máy tính của bạn</p>
                     
-                    <div id="upload-status" style="margin-top: 20px; font-weight: bold; color: var(--accent);"></div>
+                    <input type="file" id="file-upload" accept=".pdf" class="hidden" onchange="handleFileSelect(event)">
+                    <button class="px-8 py-3.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-medium text-lg transition-transform transform hover:-translate-y-1 shadow-lg shadow-brand-500/25" onclick="event.stopPropagation(); document.getElementById('file-upload').click()">
+                        Duyệt file
+                    </button>
+                    
+                    <div id="upload-status" class="mt-8 font-medium text-brand-400 min-h-[28px] text-lg"></div>
                 </div>
             </section>
 
             <!-- Knowledge Graph View -->
-            <section id="view-graph" class="view-section">
-                <div class="graph-container glass-panel">
-                    <iframe src="knowledge_graph.html" frameborder="0" id="graph-frame"></iframe>
+            <section id="view-graph" class="view-section flex-col flex-1 h-full min-h-0">
+                <div class="glass-panel rounded-2xl flex-1 overflow-hidden border border-white/5 shadow-xl relative">
+                    <iframe src="knowledge_graph.html" class="w-full h-full border-none absolute inset-0" id="graph-frame"></iframe>
+                </div>
+            </section>
+
+            <!-- NotebookLM View -->
+            <section id="view-notebooklm" class="view-section flex-col flex-1 h-full min-h-0 items-center justify-center">
+                <div class="w-full max-w-4xl glass-panel rounded-3xl p-10 border border-white/5 shadow-2xl relative overflow-hidden bg-dark-800/40">
+                    <div class="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-brand-400 via-purple-500 to-brand-500"></div>
+                    
+                    <div class="flex items-start gap-5 mb-8">
+                        <div class="w-14 h-14 bg-gradient-to-br from-purple-500/20 to-brand-500/20 rounded-2xl flex items-center justify-center shrink-0 border border-white/5">
+                            <i class="fa-solid fa-bolt text-2xl text-purple-400 drop-shadow-md"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-heading text-2xl font-bold text-white mb-2 tracking-wide">Trích xuất Tự động từ NotebookLM</h3>
+                            <p class="text-slate-400 text-[15px] leading-relaxed max-w-2xl">Dán nội dung bóc tách từ NotebookLM vào ô bên dưới. Hệ thống sẽ kết nối với Gemini để phân tích dữ liệu và ghi vào Sheet.</p>
+                        </div>
+                    </div>
+                    
+                    <textarea id="notebooklm-input" class="glass-input w-full rounded-2xl p-5 min-h-[320px] text-[15px] resize-none mb-8 font-mono leading-relaxed placeholder:text-slate-600 focus:bg-dark-800/60 relative z-50 pointer-events-auto" placeholder="Paste nội dung bóc tách từ NotebookLM vào đây..."></textarea>
+                    
+                    <div class="flex items-center justify-between bg-dark-900/30 p-4 rounded-xl border border-white/5">
+                        <div id="notebooklm-status" class="font-medium text-[15px] text-brand-400 flex items-center gap-2"></div>
+                        <button class="px-8 py-3.5 rounded-xl bg-gradient-to-r from-brand-600 to-purple-600 hover:from-brand-500 hover:to-purple-500 text-white font-semibold transition-all shadow-xl shadow-purple-500/25 flex items-center gap-3 transform hover:-translate-y-1 text-lg" onclick="processNotebookLMWeb()">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Tiến hành Phân tích
+                        </button>
+                    </div>
                 </div>
             </section>
         </main>
     </div>
 
     <!-- Floating Chatbot -->
-    <div class="chat-widget">
-        <button class="chat-toggle-btn" onclick="toggleChat()">
-            <i class="fa-solid fa-message"></i>
-        </button>
-        <div class="chat-window glass-panel" id="chat-window">
-            <div class="chat-header">
-                <h3><i class="fa-solid fa-robot"></i> Trợ lý RAG</h3>
-                <button onclick="toggleChat()"><i class="fa-solid fa-xmark"></i></button>
+    <div class="fixed bottom-10 right-10 z-50 flex flex-col items-end pointer-events-none">
+        <div id="chat-window" class="glass-panel w-[380px] h-[500px] rounded-2xl mb-5 border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex-col overflow-hidden pointer-events-auto hidden transform transition-all duration-300 origin-bottom-right">
+            <div class="bg-dark-800/90 p-4 border-b border-white/5 flex items-center justify-between backdrop-blur-md">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-brand-500/20 to-purple-500/20 border border-white/5 flex items-center justify-center">
+                        <i class="fa-solid fa-robot text-brand-400 text-lg"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-heading font-semibold text-white">Trợ lý AI Thesis</h3>
+                    </div>
+                </div>
+                <button onclick="toggleChat()" class="w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
             </div>
-            <div class="chat-body" id="chat-history">
-                <div class="message bot">Xin chào! Tôi có thể giúp bạn tra cứu thông tin từ kho luận án. Bạn muốn hỏi gì?</div>
+            
+            <div id="chat-history" class="flex-1 p-5 overflow-y-auto flex flex-col gap-4 bg-dark-900/40 scroll-smooth">
+                <div class="bg-dark-700/60 rounded-2xl rounded-tl-sm p-3.5 max-w-[85%] self-start border border-white/5 shadow-sm">
+                    <p class="text-[15px] text-slate-200 leading-relaxed">Xin chào! Tôi có thể giúp bạn tra cứu thông tin từ kho luận án. Bạn muốn hỏi gì?</p>
+                </div>
             </div>
-            <div class="chat-input-area">
-                <div style="display:flex; gap:5px;">
-                    <input type="text" id="chat-input" placeholder="Hỏi gì đó..." onkeypress="if(event.key === 'Enter') sendMessage()" class="glass-input">
-                    <button class="send-btn" onclick="sendMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+            
+            <div class="p-4 border-t border-white/5 bg-dark-800/80 backdrop-blur-md">
+                <div class="flex gap-2 bg-dark-900/50 rounded-xl p-1 border border-white/5 focus-within:border-brand-500/50 focus-within:bg-dark-800/80 transition-all">
+                    <input type="text" id="chat-input" placeholder="Nhập câu hỏi..." class="bg-transparent border-none text-white flex-1 px-4 py-2.5 text-[15px] focus:outline-none placeholder:text-slate-500" onkeypress="if(event.key === 'Enter') sendMessage()">
+                    <button class="w-11 h-11 rounded-lg bg-brand-600 hover:bg-brand-500 text-white flex items-center justify-center transition-colors shadow-md" onclick="sendMessage()">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
                 </div>
             </div>
         </div>
+        
+        <button onclick="toggleChat()" class="w-16 h-16 rounded-full bg-gradient-to-tr from-brand-600 to-purple-600 text-white shadow-[0_10px_25px_rgba(14,165,233,0.4)] flex items-center justify-center hover:scale-105 transition-transform pointer-events-auto border border-white/10 group">
+            <i class="fa-solid fa-message text-2xl"></i>
+        </button>
     </div>
 
     <!-- Modal Settings -->
-    <div class="modal-overlay" id="settings-modal">
-        <div class="modal-content glass-panel">
-            <div class="modal-header">
-                <h3><i class="fa-solid fa-sliders"></i> Cài đặt Hệ thống</h3>
-                <button onclick="closeSettings()"><i class="fa-solid fa-xmark"></i></button>
+    <div id="settings-modal" class="modal-overlay">
+        <div class="glass-panel w-full max-w-lg rounded-3xl border border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden transform transition-all scale-95 opacity-0 duration-200">
+            <div class="px-8 py-6 border-b border-white/5 flex items-center justify-between bg-dark-800/60 backdrop-blur-md">
+                <h3 class="font-heading font-semibold text-xl text-white">Cài đặt Hệ thống</h3>
+                <button onclick="closeSettings()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Backend URL (Ngrok / Render)</label>
-                    <input type="text" id="global-backend-url" placeholder="https://..." class="glass-input">
+            
+            <div class="p-8 space-y-6">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase">Backend URL</label>
+                    <input type="text" id="global-backend-url" class="glass-input w-full rounded-xl px-4 py-3.5">
                 </div>
-                <div class="form-group">
-                    <label>Gemini API Key</label>
-                    <input type="password" id="global-gemini-key" placeholder="AI Studio Key..." class="glass-input">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase">Gemini API Key</label>
+                    <input type="password" id="global-gemini-key" class="glass-input w-full rounded-xl px-4 py-3.5">
                 </div>
-                <div class="form-group">
-                    <label>Pinecone API Key</label>
-                    <input type="password" id="global-pinecone-key" placeholder="Vector DB Key..." class="glass-input">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase">Pinecone API Key</label>
+                    <input type="password" id="global-pinecone-key" class="glass-input w-full rounded-xl px-4 py-3.5">
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="cancel-btn" onclick="closeSettings()">Hủy</button>
-                <button class="save-btn" onclick="saveSettings()">Lưu Cấu Hình</button>
+            
+            <div class="px-8 py-5 border-t border-white/5 bg-dark-800/60 flex items-center justify-end gap-3">
+                <button onclick="closeSettings()" class="px-6 py-2.5 rounded-xl text-slate-300 hover:bg-white/5">Hủy</button>
+                <button onclick="saveSettings()" class="px-6 py-2.5 rounded-xl bg-brand-500 text-white font-medium">Lưu</button>
             </div>
         </div>
     </div>
@@ -711,9 +378,11 @@ function switchTab(tabId) {
     // Update title
     const titles = {
         'documents': 'Tài liệu đã lưu',
-        'graph': 'Đồ thị Tri thức'
+        'graph': 'Đồ thị Tri thức',
+        'upload': 'Tải lên PDF',
+        'notebooklm': 'Nhập từ NotebookLM'
     };
-    document.getElementById('page-title').innerText = titles[tabId];
+    document.getElementById('page-title').innerText = titles[tabId] || 'Dashboard';
 
     // Show selected view
     document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
@@ -756,24 +425,37 @@ async function loadDocuments() {
         const data = await response.json();
 
         if (data.status === 'success' && data.documents.length > 0) {
+            tbody.innerHTML = '';
             data.documents.forEach(doc => {
                 const tr = document.createElement('tr');
+                tr.className = "hover:bg-white/5 transition-colors group";
                 tr.innerHTML = `
-                    <td><input type="checkbox" class="doc-checkbox" value='${JSON.stringify(doc).replace(/'/g, "&apos;")}'></td>
-                    <td><i class="fa-solid fa-file-pdf" style="color:#e74c3c;"></i> ${doc.title || doc.filename || 'Unknown'}</td>
-                    <td>${doc.authors || doc.author || 'Unknown'}</td>
-                    <td>${doc.theory || 'Unknown'}</td>
-                    <td>${doc.methodology || 'Unknown'}</td>
-                    <td><button class="send-btn" style="padding: 5px 10px;" onclick="viewDoc('${doc.id}')">Xem</button></td>
+                    <td class="px-6 py-4 border-b border-white/10 text-center">
+                        <input type="checkbox" class="doc-checkbox w-4 h-4 rounded border-slate-600 bg-dark-700 accent-brand-500 cursor-pointer" value='${JSON.stringify(doc).replace(/'/g, "&apos;")}'>
+                    </td>
+                    <td class="px-6 py-4 border-b border-white/10">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+                                <i class="fa-solid fa-file-pdf text-red-400"></i>
+                            </div>
+                            <span class="font-medium text-slate-200 truncate max-w-[200px] block" title="${doc.filename || 'Unknown'}">${doc.filename || 'Unknown'}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 border-b border-white/10 text-slate-300">${doc.authors || doc.author || 'Unknown'}</td>
+                    <td class="px-6 py-4 border-b border-white/10 text-slate-300 truncate max-w-xs" title="${doc.title || 'Unknown'}">${doc.title || 'Unknown'}</td>
+                    <td class="px-6 py-4 border-b border-white/10 text-slate-300 truncate max-w-[150px]" title="${doc.methodology || 'Unknown'}">${doc.methodology || 'Unknown'}</td>
+                    <td class="px-6 py-4 border-b border-white/10 text-center">
+                        <button class="px-4 py-1.5 rounded-lg bg-brand-500/20 text-brand-400 hover:bg-brand-500 hover:text-white text-sm font-medium transition-all opacity-70 group-hover:opacity-100 border border-brand-500/30" onclick="viewDoc('${doc.id}')">Xem</button>
+                    </td>
                 `;
                 tbody.appendChild(tr);
             });
         } else {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--text-muted);">Chưa có tài liệu nào trong cơ sở dữ liệu.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-12 text-center text-slate-400">Chưa có tài liệu nào trong cơ sở dữ liệu.</td></tr>';
         }
     } catch (error) {
         console.error('Error fetching docs:', error);
-        document.getElementById('docs-body').innerHTML = '<tr><td colspan="5" style="text-align:center; color: #f87171;">Lỗi kết nối Backend.</td></tr>';
+        document.getElementById('docs-body').innerHTML = '<tr><td colspan="6" class="px-6 py-12 text-center text-red-400"><i class="fa-solid fa-triangle-exclamation mr-2"></i> Lỗi kết nối Backend.</td></tr>';
     }
 }
 
@@ -1083,6 +765,154 @@ async function uploadFile(file) {
     }
 }
 
+async function processNotebookLMWeb() {
+    const text = document.getElementById('notebooklm-input').value.trim();
+    const geminiKey = document.getElementById('global-gemini-key').value.trim();
+    const statusDiv = document.getElementById('notebooklm-status');
+
+    if (!text) {
+        showToast("Vui lòng dán văn bản từ NotebookLM", "warning");
+        return;
+    }
+    if (!geminiKey) {
+        showToast("Vui lòng nhập Gemini API Key trong phần Cài đặt ở góc phải trên cùng", "error");
+        return;
+    }
+    
+    statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang gọi trực tiếp Google Gemini từ trình duyệt (Siêu tốc)...`;
+    
+    const prompt = `Bạn là một trợ lý nghiên cứu học thuật chuyên nghiệp. Hãy đọc kỹ tài liệu này và trích xuất thông tin theo đúng cấu trúc dưới đây bằng Tiếng Việt (trừ những chỗ có yêu cầu dùng Tiếng Anh). 
+
+YÊU CẦU BẮT BUỘC (QUAN TRỌNG NHẤT): 
+Đối với mọi thông tin bạn trích xuất, bạn PHẢI đính kèm vị trí chính xác của thông tin đó trong ngoặc đơn ở cuối mỗi câu hoặc mỗi đoạn.
+- Nếu tài liệu có số trang: Ghi rõ số trang (VD: tr. 15, tr. 20-22). TUYỆT ĐỐI dùng chữ "tr." thay cho chữ "p.".
+- Nếu tài liệu không có số trang (HTML/Web): Ghi rõ tên Mục/Tiêu đề phần (VD: Mục Methodology, Đoạn 3 phần Discussion).
+Tuyệt đối không tự bịa thông tin, nếu tài liệu không có hãy ghi "Không đề cập".
+
+VĂN BẢN TRÍCH XUẤT TỪ NOTEBOOKLM:
+---------------------
+${text}
+---------------------
+
+Hãy điền thông tin vào định dạng JSON dưới đây. Nếu thông tin nào không có trong văn bản, hãy để trống "" hoặc [] nhưng KHÔNG được tự bịa ra.
+{
+  "authors": "Tác giả",
+  "year": "Năm xuất bản",
+  "authorYear": "Tên tác giả và năm xuất bản (VD: Smith et al., 2023)",
+  "title": "Tựa đề bài báo (Giữ nguyên Tiếng Anh)",
+  "journal": "Tên tạp chí/Hội nghị",
+  "apa7": "Trích dẫn chuẩn xác theo APA 7",
+  "theory": "Tóm tắt ngắn gọn lý thuyết nền tảng. BẮT BUỘC ghi rõ trang/phần",
+  "methodology": "Định lượng, định tính, hay hỗn hợp? Các công cụ phân tích là gì? BẮT BUỘC ghi rõ trang/phần",
+  "sampleSize": "Mô tả chi tiết số lượng, đối tượng, cách thức lấy mẫu. BẮT BUỘC ghi rõ trang/phần",
+  "keyFindings": "Liệt kê các kết quả quan trọng nhất, kèm số liệu thống kê nếu có. Mỗi kết quả BẮT BUỘC ghi rõ trang/phần",
+  "researchGap": "Bài báo này lấp đầy khoảng trống nào của các nghiên cứu đi trước? BẮT BUỘC ghi rõ trang/phần",
+  "limitations": "Tác giả tự nhận định những hạn chế nào? BẮT BUỘC ghi rõ trang/phần",
+  "detailedFindings": [
+    {
+      "content": "Nội dung phát hiện chuyên sâu... (Copy NGUYÊN VĂN từ văn bản nếu có)",
+      "location": "Trang X / Phần Y"
+    },
+    {
+      "content": "Nội dung phát hiện chuyên sâu số 2...",
+      "location": "Trang Z / Phần W"
+    }
+  ],
+  "originalQuote": "Copy NGUYÊN VĂN Tiếng Anh một câu/đoạn xuất sắc nhất. Ghi chính xác số trang/phần",
+  "translatedQuote": "Bản dịch câu trên sang Tiếng Việt mang văn phong học thuật",
+  "full_bibliography": ["Trích dẫn 1 chi tiết...", "Trích dẫn 2 chi tiết..."],
+  "references": ["Liệt kê 3-5 bài báo tham khảo quan trọng nhất mà bài báo này đã trích dẫn ở phần References"]
+}`;
+
+    const payload = {
+        contents: [{
+            parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+            responseMimeType: "application/json"
+        }
+    };
+
+    try {
+        let response;
+        let data;
+        let retries = 6;
+        let backoff = 3000;
+        
+        while (retries > 0) {
+            response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            data = await response.json();
+
+            if (response.ok) {
+                break; // Success
+            } else if (response.status === 503 || response.status === 429) {
+                retries--;
+                if (retries === 0) throw new Error(data.error?.message || "Lỗi không xác định từ Gemini API.");
+                
+                statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Server Gemini quá tải (503). Đang tự động thử lại lần thứ ${7-retries}...`;
+                await new Promise(r => setTimeout(r, backoff));
+                backoff *= 2;
+            } else {
+                throw new Error(data.error?.message || "Lỗi không xác định từ Gemini API.");
+            }
+        }
+
+        if (!data.candidates || data.candidates.length === 0) {
+            throw new Error("Không có dữ liệu trả về từ Gemini. Có thể do chính sách an toàn (Safety Settings).");
+        }
+
+        const rawContent = data.candidates[0].content?.parts?.[0]?.text;
+        if (!rawContent) {
+            throw new Error("Dữ liệu trả về bị rỗng.");
+        }
+
+        let result;
+        try {
+            result = JSON.parse(rawContent);
+        } catch(e) {
+            const cleaned = rawContent.replace(/```json/g, "").replace(/```/g, "").trim();
+            try {
+                result = JSON.parse(cleaned);
+            } catch (e2) {
+                throw new Error(`Không thể parse JSON từ phản hồi: ${cleaned.substring(0, 100)}...`);
+            }
+        }
+
+        if (Array.isArray(result) && result.length > 0) {
+            result = result[0];
+        }
+
+        statusDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang ghi dữ liệu vào Sheet...`;
+        
+        if (typeof google === 'undefined' || !google.script || !google.script.run) {
+            statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b;"></i> Cảnh báo: google.script.run không khả dụng (bạn đang chạy file HTML trực tiếp thay vì trên Apps Script). Không thể lưu.`;
+            return;
+        }
+
+        google.script.run
+            .withSuccessHandler(function(res) {
+                statusDiv.innerHTML = `<i class="fa-solid fa-check" style="color: #10b981;"></i> Trích xuất và lưu thành công! Bảng tính đã được cập nhật.`;
+                document.getElementById('notebooklm-input').value = ""; // Clear input
+                showToast("Đã lưu thành công vào Sheet!", "success");
+            })
+            .withFailureHandler(function(error) {
+                statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi ghi vào Sheet: ${error.message}`;
+                showToast("Lỗi xử lý. Vui lòng xem thông báo bên dưới nút bấm.", "error");
+            })
+            .appendNotebookLMRow(result);
+
+    } catch (error) {
+        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi: ${error.message}`;
+        showToast("Lỗi xử lý. Vui lòng xem thông báo bên dưới nút bấm.", "error");
+    }
+}
 
 </script>
 </body>
