@@ -340,6 +340,10 @@ function processNewDocuments() {
            const jsonResponse = JSON.parse(response.getContentText());
            if (jsonResponse.status === "success" && jsonResponse.data) {
              const result = jsonResponse.data;
+             let findingsText = result.keyFindings || "N/A";
+             if (result.detailedFindings && result.detailedFindings.length > 0) {
+               findingsText = result.detailedFindings.map(f => `- [${f.location || "Không rõ"}] ${f.content || ""}`).join("\n");
+             }
              sheet.appendRow([
                file.getName(),
                result.authorYear || "N/A",
@@ -348,7 +352,7 @@ function processNewDocuments() {
                result.theory || "N/A",
                result.methodology || "N/A",
                result.sampleSize || "N/A",
-               result.keyFindings || "N/A",
+               findingsText,
                result.researchGap || "N/A",
                result.limitations || "N/A",
                result.originalQuote || "N/A",
@@ -549,6 +553,10 @@ function processDocumentsAdvanced() {
            const jsonResponse = JSON.parse(response.getContentText());
            if (jsonResponse.status === "success" && jsonResponse.data) {
              const result = jsonResponse.data;
+             let findingsText = result.keyFindings || "N/A";
+             if (result.detailedFindings && result.detailedFindings.length > 0) {
+               findingsText = result.detailedFindings.map(f => `- [${f.location || "Không rõ"}] ${f.content || ""}`).join("\n");
+             }
              const bibText = (result.full_bibliography && Array.isArray(result.full_bibliography)) 
                                ? result.full_bibliography.join("\n\n") 
                                : (result.full_bibliography || "N/A");
@@ -560,7 +568,7 @@ function processDocumentsAdvanced() {
                result.theory || "N/A",
                result.methodology || "N/A",
                result.sampleSize || "N/A",
-               result.keyFindings || "N/A",
+               findingsText,
                result.researchGap || "N/A",
                result.limitations || "N/A",
                result.originalQuote || "N/A",
