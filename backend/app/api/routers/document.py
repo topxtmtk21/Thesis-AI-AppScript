@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse, HTMLResponse
 from typing import List, Dict, Any
 import tempfile
@@ -17,23 +17,6 @@ from app.utils.logger import get_logger, handle_api_error
 logger = get_logger("document_router")
 
 router = APIRouter()
-
-def process_pdf_background(temp_input_name: str, highlight_quotes: dict, filename: str):
-    try:
-        from app.services.pdf_service import PDFHighlighter
-        from app.services.drive_service import DriveManager
-        drive = DriveManager()
-        
-        temp_output = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        temp_output.close()
-        
-        highlighter = PDFHighlighter()
-        highlighter.highlight_pdf(temp_input_name, temp_output.name, highlight_quotes)
-        
-        drive.upload_file_to_processed(temp_output.name, filename.replace(".pdf", "_highlighted.pdf"))
-    except Exception as e:
-        logger.warning(f"Failed to highlight or upload to Drive in background: {e}")
-
 
 @router.get("/graph")
 def get_graph():
@@ -83,7 +66,6 @@ def analyze_and_process(req: AnalyzeDocumentRequest):
 
 @router.post("/analyze-pdf-blob")
 async def analyze_pdf_blob(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     api_key: str = Form(...),
     pinecone_api_key: str = Form(...)
@@ -117,14 +99,6 @@ async def analyze_pdf_blob(
             kg.add_relation(authors_year, ref, "cites")
         kg.save_graph()
         
-        # 6. Highlight PDF and Upload to Drive (Chạy ngầm)
-        background_tasks.add_task(
-            process_pdf_background, 
-            temp_input.name, 
-            result_json.get("highlight_quotes", {}), 
-            file.filename
-        )
-            
         return {"status": "success", "data": result_json}
     except Exception as e:
         logger.error(f"Error in analyze_pdf_blob: {e}")
@@ -176,7 +150,6 @@ def export_ris(req: ExportRisRequest):
 
 @router.post("/upload-pdf")
 async def upload_pdf(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     api_key: str = Form(...),
     pinecone_api_key: str = Form(...)
@@ -230,14 +203,6 @@ async def upload_pdf(
             kg.add_node(ref, group=2)
             kg.add_relation(authors_year, ref, "cites")
         kg.save_graph()
-
-        # 6. Tô màu PDF và đẩy lên Drive (Chạy ngầm)
-        background_tasks.add_task(
-            process_pdf_background, 
-            temp_input.name, 
-            result_json.get("highlight_quotes", {}), 
-            file.filename
-        )
 
         # Trả về JSON để Frontend nhanh chóng hiển thị dữ liệu
         return {"status": "success", "data": result_json}
