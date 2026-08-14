@@ -26,6 +26,15 @@ def get_graph():
     else:
         return HTMLResponse("<h1>Chưa có dữ liệu Đồ thị Kiến thức</h1><p>Vui lòng chạy Phân tích Nâng cao ít nhất 1 bài báo để hệ thống tự tạo sơ đồ.</p>")
 
+@router.get("/timeline")
+def get_timeline():
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+    html_path = os.path.join(base_dir, 'frontend', 'knowledge_timeline.html')
+    if os.path.exists(html_path):
+        return FileResponse(html_path)
+    else:
+        return HTMLResponse("<h1>Chưa có dữ liệu Timeline</h1><p>Vui lòng phân tích ít nhất 1 bài báo để hệ thống tự tạo timeline.</p>")
+
 db_instances = {}
 
 def get_db(pinecone_key: str, gemini_key: str):

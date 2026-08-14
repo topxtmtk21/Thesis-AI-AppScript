@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+  <style>
+    body { padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f9f9f9; }
+    h5 { color: #1a73e8; font-weight: 600; margin-bottom: 8px; font-size: 1.2rem; }
+    .helper-text { font-size: 0.85rem; color: #5f6368; margin-bottom: 16px; }
+    .article-block { border: 1px solid #ddd; border-radius: 8px; padding: 14px; margin-bottom: 14px; background: white; }
+    .article-block h6 { margin: 0 0 10px 0; color: #333; font-weight: 600; }
+    textarea { width: 100%; height: 140px; padding: 10px; border: 1px solid #ccc; border-radius: 8px; resize: none; font-size: 13px; box-sizing: border-box; }
+    textarea:focus, input:focus { border-color: #1a73e8; outline: none; }
+    input[type="text"] { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; box-sizing: border-box; margin-bottom: 8px; }
+    .row-fields { display: flex; gap: 8px; }
+    .row-fields input { flex: 1; }
+    .btn { background-color: #1a73e8; border-radius: 20px; text-transform: none; font-weight: bold; width: 100%; }
+    .btn:hover { background-color: #1557b0; }
+    .link-toggle { display: inline-block; margin-bottom: 14px; color: #1a73e8; cursor: pointer; font-size: 0.9rem; }
+    .hidden { display: none; }
+    .loader { display: none; margin-top: 15px; text-align: center; }
+  </style>
+</head>
+<body>
+
+  <h5>📰 Phân tích Khung Tin tức</h5>
+  <div class="helper-text">Dán nội dung bài báo tin tức thật (không phải bài báo học thuật). Hệ thống sẽ phân tích khung tin, giọng điệu, nguồn trích dẫn theo các lý thuyết báo chí học. Có thể so sánh tối đa 3 bài viết về cùng 1 sự kiện.</div>
+
+  <div class="article-block">
+    <h6>Bài báo 1</h6>
+    <div class="row-fields">
+      <input type="text" id="source1" placeholder="Nguồn/Tòa soạn">
+      <input type="text" id="date1" placeholder="Ngày đăng">
+    </div>
+    <input type="text" id="url1" placeholder="URL (chỉ để ghi chú, không tự tải)">
+    <textarea id="text1" placeholder="Dán nội dung bài báo vào đây..."></textarea>
+  </div>
+
+  <span class="link-toggle" id="toggleCompare" onclick="toggleCompareMode()">+ So sánh với bài báo khác</span>
+
+  <div id="compareBlocks" class="hidden">
+    <div class="article-block">
+      <h6>Bài báo 2</h6>
+      <div class="row-fields">
+        <input type="text" id="source2" placeholder="Nguồn/Tòa soạn">
+        <input type="text" id="date2" placeholder="Ngày đăng">
+      </div>
+      <textarea id="text2" placeholder="Dán nội dung bài báo vào đây..."></textarea>
+    </div>
+    <div class="article-block">
+      <h6>Bài báo 3 (tuỳ chọn)</h6>
+      <div class="row-fields">
+        <input type="text" id="source3" placeholder="Nguồn/Tòa soạn">
+        <input type="text" id="date3" placeholder="Ngày đăng">
+      </div>
+      <textarea id="text3" placeholder="Dán nội dung bài báo vào đây (bỏ trống nếu chỉ so sánh 2 bài)..."></textarea>
+    </div>
+  </div>
+
+  <button id="processBtn" class="btn waves-effect waves-light" onclick="submitAnalysis()">
+    Bắt đầu phân tích
+  </button>
+
+  <div class="loader" id="loader">
+    <div class="preloader-wrapper small active">
+      <div class="spinner-layer spinner-blue-only">
+        <div class="circle-clipper left"><div class="circle"></div></div>
+        <div class="gap-patch"><div class="circle"></div></div>
+        <div class="circle-clipper right"><div class="circle"></div></div>
+      </div>
+    </div>
+    <div style="margin-top: 10px; color: #1a73e8; font-weight: 500;">Đang phân tích, vui lòng chờ...</div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+  <script>
+    let compareMode = false;
+
+    function toggleCompareMode() {
+      compareMode = !compareMode;
+      document.getElementById('compareBlocks').classList.toggle('hidden', !compareMode);
+      document.getElementById('toggleCompare').textContent = compareMode
+        ? '- Ẩn bài báo so sánh'
+        : '+ So sánh với bài báo khác';
+    }
+
+    function submitAnalysis() {
+      const articles = [];
+      for (let i = 1; i <= 3; i++) {
+        const text = document.getElementById('text' + i).value.trim();
+        if (!text) continue;
+        articles.push({
+          source: document.getElementById('source' + i).value.trim(),
+          date: document.getElementById('date' + i).value.trim(),
+          url: i === 1 ? document.getElementById('url1').value.trim() : '',
+          text: text
+        });
+      }
+
+      if (articles.length === 0) {
+        M.toast({html: 'Vui lòng dán ít nhất 1 bài báo!', classes: 'red rounded'});
+        return;
+      }
+
+      document.getElementById('processBtn').style.display = 'none';
+      document.getElementById('loader').style.display = 'block';
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          google.script.host.close();
+        })
+        .withFailureHandler(function(error) {
+          M.toast({html: 'Lỗi: ' + error.message, classes: 'red rounded'});
+          document.getElementById('processBtn').style.display = 'block';
+          document.getElementById('loader').style.display = 'none';
+        })
+        .processNewsAnalysis(articles);
+    }
+  </script>
+</body>
+</html>

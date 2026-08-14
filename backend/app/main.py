@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from google import genai
 from google.genai import types
 from pinecone import Pinecone
-from app.api.routers import document, chat, jobs
+from app.api.routers import document, chat, jobs, research
 import os
 
 app = FastAPI(title="Academic Tool Backend API")
@@ -28,9 +28,9 @@ app.add_middleware(
 # gọi được. Để trống thì tắt kiểm tra này (giữ hành vi cũ, không phá vỡ deploy hiện tại).
 BACKEND_SHARED_SECRET = os.environ.get("BACKEND_SHARED_SECRET")
 
-# /api/graph được nhúng qua <iframe src="..."> trong Apps Script nên trình duyệt không
-# gắn được header tuỳ chỉnh - phải loại trừ khỏi việc kiểm tra secret.
-_SECRET_EXEMPT_PATHS = {"/api/graph"}
+# /api/graph và /api/timeline được nhúng qua <iframe src="..."> trong Apps Script nên
+# trình duyệt không gắn được header tuỳ chỉnh - phải loại trừ khỏi việc kiểm tra secret.
+_SECRET_EXEMPT_PATHS = {"/api/graph", "/api/timeline"}
 
 
 @app.middleware("http")
@@ -52,6 +52,7 @@ async def verify_backend_secret(request: Request, call_next):
 app.include_router(document.router, prefix="/api", tags=["Document"])
 app.include_router(chat.router, prefix="/api", tags=["Chat"])
 app.include_router(jobs.router, prefix="/api", tags=["Jobs"])
+app.include_router(research.router, prefix="/api", tags=["Research"])
 
 @app.get("/health")
 def health_check(api_key: Optional[str] = None, pinecone_api_key: Optional[str] = None):

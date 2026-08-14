@@ -30,22 +30,32 @@ function doPost(e) {
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('🤖 Công cụ Luận án')
-    .addItem('🚀 1. Khởi tạo Bảng dữ liệu', 'setupSheet')
-    .addItem('⚙️ 2. Cấu hình API Key & Folder ID', 'configureSettings')
-    .addItem('🔗 3. Cập nhật Link Backend (Ngrok)', 'configureBackendUrl')
-    .addItem('⚡ 4. Chạy Phân tích Tài liệu', 'processNewDocuments')
-    .addItem('⚡ 4b. Phân tích Nâng cao (Có trang & Tham khảo)', 'processDocumentsAdvanced')
-    .addItem('📝 4c. Dán văn bản từ NotebookLM', 'openNotebookLMDialog')
-    .addItem('🔄 4d. Kiểm tra tiến trình đang xử lý nền', 'checkPendingJobsManually')
-    .addItem('📋 5. Xem Cấu hình Hiện tại', 'showCurrentSettings')
+    // --- Cấu hình ---
+    .addItem('🚀 Khởi tạo Bảng dữ liệu', 'setupSheet')
+    .addItem('⚙️ Cấu hình API Key & Folder ID', 'configureSettings')
+    .addItem('🔗 Cập nhật Backend URL', 'configureBackendUrl')
+    .addItem('📋 Xem Cấu hình Hiện tại', 'showCurrentSettings')
+    .addItem('🔍 Kiểm tra lỗi API (Chẩn đoán)', 'runDiagnostics')
     .addSeparator()
-    .addItem('🔍 6. Kiểm tra lỗi API (Chẩn đoán)', 'runDiagnostics')
+    // --- Phân tích Tài liệu Học thuật ---
+    .addItem('⚡ Chạy Phân tích Tài liệu (Quét thư mục)', 'processNewDocuments')
+    .addItem('⚡ Phân tích Nâng cao (Có trang & Tham khảo)', 'processDocumentsAdvanced')
+    .addItem('📝 Dán văn bản từ NotebookLM', 'openNotebookLMDialog')
+    .addItem('🔄 Kiểm tra tiến trình đang xử lý nền', 'checkPendingJobsManually')
     .addSeparator()
-    .addItem('💬 7. Chat với Trợ lý AI (RAG)', 'openChatSidebar')
+    // --- Trợ lý AI & Tổng hợp ---
+    .addItem('💬 Chat với Trợ lý AI (RAG)', 'openChatSidebar')
+    .addItem('🧠 Tổng hợp Literature Review (Matrix Synthesis)', 'generateMatrixSynthesis')
     .addSeparator()
-    .addItem('🧠 8. Tổng hợp Literature Review (Matrix Synthesis)', 'generateMatrixSynthesis')
-    .addItem('📥 9. Xuất file RIS (Zotero/EndNote)', 'exportRis')
-    .addItem('🕸️ 10. Xem Đồ thị Kiến thức (Knowledge Graph)', 'showKnowledgeGraph')
+    // --- Xuất & Trực quan hoá ---
+    .addItem('📥 Xuất file RIS (Zotero/EndNote)', 'exportRis')
+    .addItem('🕸️ Xem Đồ thị Kiến thức (Knowledge Graph)', 'showKnowledgeGraph')
+    .addItem('📅 Xem Timeline Nghiên cứu', 'showResearchTimeline')
+    .addSeparator()
+    // --- Công cụ chuyên ngành Báo chí học ---
+    .addItem('📰 Phân tích Khung Tin tức', 'openNewsAnalysisDialog')
+    .addItem('🎙️ Mã hoá Phỏng vấn (Thematic Coding)', 'openInterviewCodingDialog')
+    .addItem('📊 Tính Độ tin cậy Mã hoá (Cohen\'s Kappa)', 'calculateInterCoderReliability')
     .addToUi();
 }
 
@@ -133,16 +143,16 @@ function getBackendHeaders() {
 }
 
 // =================================================================
-// 🔗 2.5. GIAO DIỆN CẬP NHẬT NHANH BACKEND URL (NGROK)
+// 🔗 GIAO DIỆN CẬP NHẬT NHANH BACKEND URL
 // =================================================================
 function configureBackendUrl() {
   const ui = SpreadsheetApp.getUi();
   const userProperties = PropertiesService.getUserProperties();
-  
+
   const currentBackendUrl = userProperties.getProperty('BACKEND_URL') || '';
   const backendResponse = ui.prompt(
-    'Cập nhật Link Backend (Ngrok)',
-    `Nhập đường link Ngrok mới nhất của bạn (Ví dụ: https://xxxx.ngrok-free.app)\n(Hiện tại: ${currentBackendUrl || 'Chưa thiết lập'}):`,
+    'Cập nhật Backend URL',
+    `Nhập URL Backend của bạn (VD: link Cloud Run/Railway dạng https://xxxx.run.app, hoặc link Ngrok nếu đang chạy local dạng https://xxxx.ngrok-free.app)\n(Hiện tại: ${currentBackendUrl || 'Chưa thiết lập'}):`,
     ui.ButtonSet.OK_CANCEL
   );
 
@@ -154,7 +164,7 @@ function configureBackendUrl() {
     }
     if (newBackendUrl) {
       userProperties.setProperty('BACKEND_URL', newBackendUrl);
-      ui.alert('✅ Đã cập nhật Link Backend thành công!');
+      ui.alert('✅ Đã cập nhật Backend URL thành công!');
     }
   }
 }
@@ -976,6 +986,342 @@ function showKnowledgeGraph() {
       .setHeight(700);
       
   ui.showModalDialog(htmlOutput, '🕸️ Mạng lưới Trích dẫn (Knowledge Graph)');
+}
+
+// =================================================================
+// 📅 10b. XEM TIMELINE NGHIÊN CỨU
+// =================================================================
+function showResearchTimeline() {
+  const userProperties = PropertiesService.getUserProperties();
+  const backendUrl = userProperties.getProperty('BACKEND_URL');
+  const ui = SpreadsheetApp.getUi();
+
+  if (!backendUrl) {
+    ui.alert("⚠️ Bạn chưa cấu hình Backend URL!");
+    return;
+  }
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <base target="_top">
+        <style>
+          body { margin: 0; padding: 0; overflow: hidden; }
+          iframe { width: 100%; height: 100vh; border: none; }
+        </style>
+      </head>
+      <body>
+        <iframe src="${backendUrl}/api/timeline"></iframe>
+      </body>
+    </html>
+  `;
+
+  const htmlOutput = HtmlService.createHtmlOutput(html)
+      .setWidth(900)
+      .setHeight(700);
+
+  ui.showModalDialog(htmlOutput, '📅 Timeline Nghiên cứu');
+}
+
+// =================================================================
+// 🧰 TIỆN ÍCH: LẤY (HOẶC TẠO MỚI) 1 SHEET TAB THEO TÊN, KÈM HEADER
+// =================================================================
+function getOrCreateSheet(name, headers) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    const range = sheet.getRange(1, 1, 1, headers.length);
+    range.setValues([headers]);
+    range.setFontWeight("bold")
+         .setBackground("#d9ead3")
+         .setHorizontalAlignment("center")
+         .setVerticalAlignment("middle")
+         .setWrap(true);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+// =================================================================
+// 📰 11. PHÂN TÍCH KHUNG TIN TỨC (FRAMING ANALYSIS) + SO SÁNH ĐA NGUỒN
+// =================================================================
+function openNewsAnalysisDialog() {
+  const html = HtmlService.createHtmlOutputFromFile('news_analysis_dialog')
+      .setWidth(650)
+      .setHeight(600);
+  SpreadsheetApp.getUi().showModalDialog(html, ' ');
+}
+
+function processNewsAnalysis(articles) {
+  const userProperties = PropertiesService.getUserProperties();
+  const apiKey = userProperties.getProperty('GEMINI_API_KEY');
+  const backendUrl = userProperties.getProperty('BACKEND_URL');
+  const ui = SpreadsheetApp.getUi();
+
+  if (!apiKey || !backendUrl) {
+    throw new Error("Bạn chưa cấu hình đủ Gemini API Key hoặc Backend URL!");
+  }
+  if (!articles || articles.length === 0) {
+    throw new Error("Không có bài báo nào để phân tích.");
+  }
+
+  const sheetApp = SpreadsheetApp.getActiveSpreadsheet();
+
+  if (articles.length === 1) {
+    // 1 bài báo -> phân tích khung tin đơn lẻ, ghi 1 dòng vào sheet riêng.
+    sheetApp.toast("Đang phân tích khung tin tức...", "📰 Đang xử lý", -1);
+
+    const article = articles[0];
+    const response = UrlFetchApp.fetch(backendUrl + "/api/analyze-news", {
+      method: "post",
+      contentType: "application/json",
+      headers: getBackendHeaders(),
+      payload: JSON.stringify({
+        api_key: apiKey,
+        text: article.text,
+        source_name: article.source,
+        published_date: article.date
+      }),
+      muteHttpExceptions: true
+    });
+
+    if (response.getResponseCode() !== 200) {
+      throw new Error("Lỗi từ Backend: " + response.getContentText());
+    }
+
+    const jsonResponse = JSON.parse(response.getContentText());
+    if (jsonResponse.status !== "success" || !jsonResponse.data) {
+      throw new Error("Dữ liệu trả về không hợp lệ.");
+    }
+
+    const result = jsonResponse.data;
+    const sheet = getOrCreateSheet("Phân tích Tin tức", [
+      "Nguồn/Tòa soạn", "Ngày đăng", "Khung chủ đạo", "Giọng điệu",
+      "Nguồn trích dẫn", "Dấu hiệu thiên kiến", "Tóm tắt", "Ghi chú lý thuyết"
+    ]);
+
+    const citedSources = Array.isArray(result.cited_sources) ? result.cited_sources.join("; ") : (result.cited_sources || "");
+
+    sheet.appendRow([
+      article.source || "N/A",
+      article.date || "N/A",
+      result.dominant_frame || "N/A",
+      result.tone || "N/A",
+      citedSources || "N/A",
+      result.bias_indicators || "N/A",
+      result.summary || "N/A",
+      result.theory_notes || "N/A"
+    ]);
+
+    sheetApp.toast("Đã ghi kết quả phân tích vào sheet 'Phân tích Tin tức'!", "✅ Thành công", 5);
+
+  } else {
+    // 2-3 bài báo -> so sánh khung tin, xuất báo cáo ra Google Doc (giống Matrix Synthesis).
+    sheetApp.toast("Đang so sánh khung tin giữa " + articles.length + " bài báo...", "📰 Đang xử lý", -1);
+
+    const response = UrlFetchApp.fetch(backendUrl + "/api/compare-news", {
+      method: "post",
+      contentType: "application/json",
+      headers: getBackendHeaders(),
+      payload: JSON.stringify({
+        api_key: apiKey,
+        articles: articles.map(a => ({ source: a.source || "Không rõ", text: a.text }))
+      }),
+      muteHttpExceptions: true
+    });
+
+    if (response.getResponseCode() !== 200) {
+      throw new Error("Lỗi từ Backend: " + response.getContentText());
+    }
+
+    const jsonResponse = JSON.parse(response.getContentText());
+    if (jsonResponse.status !== "success" || !jsonResponse.report) {
+      throw new Error("Dữ liệu trả về không hợp lệ.");
+    }
+
+    const doc = DocumentApp.create("So sánh Khung Tin tức - " + new Date().toLocaleDateString());
+    doc.getBody().insertParagraph(0, jsonResponse.report);
+    const docUrl = doc.getUrl();
+
+    const htmlOutput = HtmlService.createHtmlOutput('<p>✅ So sánh thành công!</p><p>Mở báo cáo tại đây: <a href="' + docUrl + '" target="_blank">Báo cáo So sánh Khung Tin tức</a></p>')
+      .setWidth(350)
+      .setHeight(150);
+    ui.showModalDialog(htmlOutput, 'Hoàn thành So sánh Khung Tin tức');
+  }
+
+  return { status: "success" };
+}
+
+// =================================================================
+// 🎙️ 12. MÃ HOÁ PHỎNG VẤN (THEMATIC CODING)
+// =================================================================
+function openInterviewCodingDialog() {
+  const html = HtmlService.createHtmlOutputFromFile('interview_coding_dialog')
+      .setWidth(600)
+      .setHeight(500);
+  SpreadsheetApp.getUi().showModalDialog(html, ' ');
+}
+
+function processInterviewCoding(transcript, intervieweeRole) {
+  const userProperties = PropertiesService.getUserProperties();
+  const apiKey = userProperties.getProperty('GEMINI_API_KEY');
+  const backendUrl = userProperties.getProperty('BACKEND_URL');
+
+  if (!apiKey || !backendUrl) {
+    throw new Error("Bạn chưa cấu hình đủ Gemini API Key hoặc Backend URL!");
+  }
+
+  const sheetApp = SpreadsheetApp.getActiveSpreadsheet();
+  sheetApp.toast("Đang mã hoá transcript phỏng vấn...", "🎙️ Đang xử lý", -1);
+
+  const response = UrlFetchApp.fetch(backendUrl + "/api/code-interview", {
+    method: "post",
+    contentType: "application/json",
+    headers: getBackendHeaders(),
+    payload: JSON.stringify({
+      api_key: apiKey,
+      transcript: transcript,
+      interviewee_role: intervieweeRole
+    }),
+    muteHttpExceptions: true
+  });
+
+  if (response.getResponseCode() !== 200) {
+    throw new Error("Lỗi từ Backend: " + response.getContentText());
+  }
+
+  const jsonResponse = JSON.parse(response.getContentText());
+  if (jsonResponse.status !== "success" || !jsonResponse.data) {
+    throw new Error("Dữ liệu trả về không hợp lệ.");
+  }
+
+  const result = jsonResponse.data;
+  const themes = Array.isArray(result.themes) ? result.themes : [];
+
+  if (themes.length === 0) {
+    throw new Error("Không mã hoá được chủ đề nào từ transcript này.");
+  }
+
+  const sheet = getOrCreateSheet("Mã hoá Phỏng vấn", [
+    "Người phỏng vấn/Vai trò", "Chủ đề", "Mô tả", "Trích dẫn minh hoạ", "Ghi chú tần suất"
+  ]);
+
+  themes.forEach(theme => {
+    const quotes = Array.isArray(theme.supporting_quotes) ? theme.supporting_quotes.join("\n") : (theme.supporting_quotes || "");
+    sheet.appendRow([
+      intervieweeRole || "N/A",
+      theme.theme || "N/A",
+      theme.description || "N/A",
+      quotes || "N/A",
+      theme.prevalence_note || "N/A"
+    ]);
+  });
+
+  sheetApp.toast(`Đã mã hoá ${themes.length} chủ đề vào sheet 'Mã hoá Phỏng vấn'!`, "✅ Thành công", 5);
+  return { status: "success" };
+}
+
+// =================================================================
+// 📊 14. TÍNH ĐỘ TIN CẬY GIỮA 2 NGƯỜI MÃ HOÁ (COHEN'S KAPPA)
+// =================================================================
+// Thuần Apps Script, không gọi Backend - đây là phép tính thống kê đơn giản, không
+// cần AI. Đọc 2 cột liền kề đang được bôi đen trong sheet (mã của Coder A và Coder B,
+// cùng số dòng, cùng thứ tự item) và tính % đồng thuận + Cohen's Kappa.
+function calculateInterCoderReliability() {
+  const ui = SpreadsheetApp.getUi();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const range = sheet.getActiveRange();
+
+  if (!range || range.getNumColumns() !== 2) {
+    ui.alert("⚠️ Vui lòng bôi đen đúng 2 cột liền kề: cột mã của Coder A và cột mã của Coder B (cùng số dòng, cùng thứ tự item).");
+    return;
+  }
+
+  const values = range.getValues();
+  const codesA = [];
+  const codesB = [];
+  for (let i = 0; i < values.length; i++) {
+    const a = String(values[i][0]).trim();
+    const b = String(values[i][1]).trim();
+    if (!a && !b) continue; // bỏ qua dòng trống
+    codesA.push(a);
+    codesB.push(b);
+  }
+
+  if (codesA.length === 0) {
+    ui.alert("⚠️ Không có dữ liệu hợp lệ trong vùng đã chọn.");
+    return;
+  }
+
+  const result = computeCohenKappa(codesA, codesB);
+
+  let interpretation;
+  if (result.kappa < 0) interpretation = "Kém (Poor)";
+  else if (result.kappa <= 0.20) interpretation = "Nhẹ (Slight)";
+  else if (result.kappa <= 0.40) interpretation = "Vừa phải (Fair)";
+  else if (result.kappa <= 0.60) interpretation = "Trung bình (Moderate)";
+  else if (result.kappa <= 0.80) interpretation = "Đáng kể (Substantial)";
+  else interpretation = "Gần như hoàn hảo (Almost Perfect)";
+
+  let message = `📊 KẾT QUẢ ĐỘ TIN CẬY MÃ HOÁ (${codesA.length} item):\n\n` +
+    `• Tỷ lệ đồng thuận (Observed Agreement): ${(result.observedAgreement * 100).toFixed(1)}%\n` +
+    `• Cohen's Kappa: ${result.kappa.toFixed(3)}\n` +
+    `• Mức độ tin cậy (thang Landis & Koch): ${interpretation}\n`;
+
+  if (result.disagreements.length > 0) {
+    const preview = result.disagreements.slice(0, 10)
+      .map(d => `  - Dòng ${d.index + 1}: "${d.a}" ≠ "${d.b}"`)
+      .join("\n");
+    message += `\n⚠️ ${result.disagreements.length} dòng bất đồng` +
+      (result.disagreements.length > 10 ? " (hiển thị 10 dòng đầu)" : "") + `:\n${preview}`;
+  } else {
+    message += "\n✅ Không có dòng nào bất đồng.";
+  }
+
+  ui.alert(message);
+}
+
+// Công thức Cohen's Kappa chuẩn: κ = (P_observed - P_expected) / (1 - P_expected)
+function computeCohenKappa(codesA, codesB) {
+  const n = codesA.length;
+  let agreeCount = 0;
+  const disagreements = [];
+  const countsA = {};
+  const countsB = {};
+  const allLabels = new Set();
+
+  for (let i = 0; i < n; i++) {
+    const a = codesA[i];
+    const b = codesB[i];
+    allLabels.add(a);
+    allLabels.add(b);
+    countsA[a] = (countsA[a] || 0) + 1;
+    countsB[b] = (countsB[b] || 0) + 1;
+    if (a === b) {
+      agreeCount++;
+    } else {
+      disagreements.push({ index: i, a: a, b: b });
+    }
+  }
+
+  const observedAgreement = agreeCount / n;
+
+  let expectedAgreement = 0;
+  allLabels.forEach(label => {
+    const pA = (countsA[label] || 0) / n;
+    const pB = (countsB[label] || 0) / n;
+    expectedAgreement += pA * pB;
+  });
+
+  // Nếu 2 người mã hoá hoàn toàn giống nhau ở mọi item (kể cả khi chỉ có 1 nhãn duy
+  // nhất), quy ước Kappa = 1 (không chia 0/0).
+  const kappa = expectedAgreement >= 1
+    ? 1
+    : (observedAgreement - expectedAgreement) / (1 - expectedAgreement);
+
+  return { observedAgreement, expectedAgreement, kappa, disagreements };
 }
 
 // =================================================================

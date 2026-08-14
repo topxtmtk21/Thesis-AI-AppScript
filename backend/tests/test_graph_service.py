@@ -46,6 +46,7 @@ def test_add_paper_and_references_helper():
         "authors": "Grimme, M.",
         "year": "2024",
         "title": "AI in Media Organisations",
+        "theory": "Human-Machine Communication",
         "references": ["Venkatesh & Bala 2008", "Dorr & Hollnbuchner 2017"]
     }
 
@@ -55,3 +56,51 @@ def test_add_paper_and_references_helper():
     assert kg.graph.has_node("Grimme, M. (2024)")
     assert kg.graph.has_edge("Grimme, M. (2024)", "Venkatesh & Bala 2008")
     assert kg.graph.number_of_nodes() == 3
+    # year/theory phải được lưu thành attribute riêng trên node, không chỉ nhét vào
+    # label string - cần cho generate_timeline_html() sắp xếp theo thời gian.
+    node_attrs = kg.graph.nodes["Grimme, M. (2024)"]
+    assert node_attrs["year"] == "2024"
+    assert node_attrs["theory"] == "Human-Machine Communication"
+
+
+def test_generate_timeline_html_groups_and_sorts_by_year(tmp_path):
+    kg = _isolated_manager("unused")
+    kg.add_paper_and_references({"authors": "Smith", "year": "2020", "title": "Early AI in News", "theory": "Agenda-Setting"})
+    kg.add_paper_and_references({"authors": "Doe", "year": "2023", "title": "Algorithmic Journalism", "theory": "Gatekeeping Theory"})
+    kg.add_paper_and_references({"authors": "Lee", "year": "2020", "title": "Newsroom AI Adoption", "theory": "TAM3"})
+    kg.add_paper_and_references({"authors": "Unknown", "year": "", "title": "No year paper", "theory": ""})
+
+    output_path = tmp_path / "timeline.html"
+    kg.generate_timeline_html(str(output_path))
+
+    content = output_path.read_text(encoding="utf-8")
+
+    pos_2020 = content.index(">2020<")
+    pos_2023 = content.index(">2023<")
+    assert pos_2020 < pos_2023, "2020 block must render before 2023 block"
+    assert content[pos_2020:pos_2023].count("timeline-card") == 2
+    assert "Không rõ năm" in content
+    assert "Agenda-Setting" in content
+
+
+def test_generate_timeline_html_escapes_content(tmp_path):
+    kg = _isolated_manager("unused")
+    kg.add_paper_and_references({
+        "authors": "Evil", "year": "2024",
+        "title": "<script>alert(1)</script>", "theory": ""
+    })
+
+    output_path = tmp_path / "timeline.html"
+    kg.generate_timeline_html(str(output_path))
+    content = output_path.read_text(encoding="utf-8")
+
+    assert "<script>alert(1)</script>" not in content
+    assert "&lt;script&gt;" in content
+
+
+def test_generate_timeline_html_with_no_papers_shows_empty_state(tmp_path):
+    kg = _isolated_manager("unused")
+    output_path = tmp_path / "timeline.html"
+    kg.generate_timeline_html(str(output_path))
+    content = output_path.read_text(encoding="utf-8")
+    assert "Chưa có dữ liệu" in content

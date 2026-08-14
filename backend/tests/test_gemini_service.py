@@ -159,6 +159,61 @@ def test_analyze_pdf_native_deletes_uploaded_file_on_success(gemini):
     assert calls == ["upload", "generate", ("delete", "files/abc123")]
 
 
+def test_analyze_news_framing_uses_low_thinking(gemini):
+    captured = {}
+
+    def fake_generate(model, contents, config=None):
+        captured["contents"] = contents
+        captured["config"] = config
+        return _fake_response('{"dominant_frame": "conflict"}')
+
+    gemini.client.models.generate_content = fake_generate
+    result = gemini.analyze_news_framing("bai bao noi dung", source_name="VNE", published_date="2024-01-01")
+
+    assert result == {"dominant_frame": "conflict"}
+    assert captured["config"].thinking_config.thinking_level.name == "LOW"
+    assert "VNE" in captured["contents"]
+    assert "2024-01-01" in captured["contents"]
+
+
+def test_compare_news_framing_keeps_default_thinking(gemini):
+    # Same reasoning as synthesize_literature: comparing framing across sources
+    # benefits from deeper reasoning than plain field extraction.
+    captured = {}
+
+    def fake_generate(model, contents, config=None):
+        captured["contents"] = contents
+        captured["config"] = config
+        return _fake_response("comparative report")
+
+    gemini.client.models.generate_content = fake_generate
+    result = gemini.compare_news_framing([
+        {"source": "Báo A", "text": "noi dung A"},
+        {"source": "Báo B", "text": "noi dung B"}
+    ])
+
+    assert result == "comparative report"
+    assert captured["config"] is None
+    assert "noi dung A" in captured["contents"]
+    assert "noi dung B" in captured["contents"]
+
+
+def test_code_interview_transcript_uses_low_thinking(gemini):
+    captured = {}
+
+    def fake_generate(model, contents, config=None):
+        captured["contents"] = contents
+        captured["config"] = config
+        return _fake_response('{"themes": []}')
+
+    gemini.client.models.generate_content = fake_generate
+    result = gemini.code_interview_transcript("noi dung phong van", interviewee_role="Biên tập viên")
+
+    assert result == {"themes": []}
+    assert captured["config"].thinking_config.thinking_level.name == "LOW"
+    assert "Biên tập viên" in captured["contents"]
+
+
 def test_analyze_pdf_native_deletes_file_on_every_retry_attempt(gemini, monkeypatch):
     # Skip tenacity's real exponential backoff (15-60s x up to 5 attempts) so this
     # test runs in milliseconds instead of minutes.

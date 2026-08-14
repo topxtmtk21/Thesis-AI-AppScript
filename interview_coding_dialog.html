@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+  <style>
+    body { padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f9f9f9; }
+    h5 { color: #1a73e8; font-weight: 600; margin-bottom: 20px; font-size: 1.2rem; }
+    input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; margin-bottom: 12px; }
+    input[type="text"]:focus { border-color: #1a73e8; outline: none; }
+    textarea { width: 100%; height: 220px; padding: 12px; border: 1px solid #ccc; border-radius: 8px; resize: none; font-size: 14px; margin-bottom: 15px; box-sizing: border-box; }
+    textarea:focus { border-color: #1a73e8; outline: none; box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2); }
+    .btn { background-color: #1a73e8; border-radius: 20px; text-transform: none; font-weight: bold; width: 100%; }
+    .btn:hover { background-color: #1557b0; }
+    .helper-text { font-size: 0.9rem; color: #5f6368; margin-bottom: 10px; }
+    .loader { display: none; margin-top: 15px; text-align: center; }
+  </style>
+</head>
+<body>
+
+  <h5>🎙️ Mã hoá Phỏng vấn (Thematic Coding)</h5>
+  <div class="helper-text">Dán transcript phỏng vấn (nhà báo, biên tập viên...). Hệ thống sẽ tự động mã hoá theo chủ đề (thematic coding, phương pháp Braun &amp; Clarke), kèm trích dẫn minh hoạ cho mỗi chủ đề.</div>
+
+  <input type="text" id="intervieweeRole" placeholder="Vai trò người được phỏng vấn (VD: Biên tập viên báo X)">
+
+  <textarea id="transcript" placeholder="Dán transcript phỏng vấn vào đây..."></textarea>
+
+  <button id="processBtn" class="btn waves-effect waves-light" onclick="submitCoding()">
+    Bắt đầu mã hoá
+  </button>
+
+  <div class="loader" id="loader">
+    <div class="preloader-wrapper small active">
+      <div class="spinner-layer spinner-blue-only">
+        <div class="circle-clipper left"><div class="circle"></div></div>
+        <div class="gap-patch"><div class="circle"></div></div>
+        <div class="circle-clipper right"><div class="circle"></div></div>
+      </div>
+    </div>
+    <div style="margin-top: 10px; color: #1a73e8; font-weight: 500;">Đang mã hoá, vui lòng chờ...</div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+  <script>
+    function submitCoding() {
+      const transcript = document.getElementById('transcript').value.trim();
+      const role = document.getElementById('intervieweeRole').value.trim();
+
+      if (!transcript) {
+        M.toast({html: 'Vui lòng dán transcript trước!', classes: 'red rounded'});
+        return;
+      }
+
+      document.getElementById('processBtn').style.display = 'none';
+      document.getElementById('loader').style.display = 'block';
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          google.script.host.close();
+        })
+        .withFailureHandler(function(error) {
+          M.toast({html: 'Lỗi: ' + error.message, classes: 'red rounded'});
+          document.getElementById('processBtn').style.display = 'block';
+          document.getElementById('loader').style.display = 'none';
+        })
+        .processInterviewCoding(transcript, role);
+    }
+  </script>
+</body>
+</html>

@@ -41,3 +41,18 @@ class SynthesisRequest(BaseModel):
     api_key: str
     documents: List[Dict[str, str]]
 
+class AnalyzeNewsRequest(BaseModel):
+    api_key: str
+    text: str
+    source_name: Optional[str] = ""
+    published_date: Optional[str] = ""
+
+class CompareNewsRequest(BaseModel):
+    api_key: str
+    articles: List[Dict[str, str]]  # mỗi item: {"source": ..., "text": ...}
+
+class CodeInterviewRequest(BaseModel):
+    api_key: str
+    transcript: str
+    interviewee_role: Optional[str] = ""
+

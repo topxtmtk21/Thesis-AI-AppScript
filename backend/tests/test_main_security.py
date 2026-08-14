@@ -1,4 +1,3 @@
-import importlib
 from unittest.mock import patch
 
 from starlette.testclient import TestClient
@@ -7,12 +6,13 @@ import app.main as main_module
 
 
 def _app_with_secret(monkeypatch, secret):
-    if secret is not None:
-        monkeypatch.setenv("BACKEND_SHARED_SECRET", secret)
-    else:
-        monkeypatch.delenv("BACKEND_SHARED_SECRET", raising=False)
-    import app.main as main_module
-    importlib.reload(main_module)
+    # Patch the module attribute directly (not os.environ + importlib.reload): reload()
+    # mutates app.main's module dict in place, and verify_backend_secret's closure reads
+    # BACKEND_SHARED_SECRET from that same dict at call time - so a reload here would
+    # leak into every other app instance in the process (including conftest's `client`
+    # fixture and every other test file), since they all share that module dict.
+    # monkeypatch.setattr auto-reverts after the test, so no leakage.
+    monkeypatch.setattr(main_module, "BACKEND_SHARED_SECRET", secret)
     return main_module.app
 
 
