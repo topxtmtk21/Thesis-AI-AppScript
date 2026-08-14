@@ -64,7 +64,10 @@ LƯU Ý: Các mục trong "highlight_quotes" bắt buộc phải TRÍCH DẪN NG
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
-        return json.loads(response.text)
+        data = json.loads(response.text)
+        if isinstance(data, list) and len(data) > 0:
+            return data[0]
+        return data
 
     @retry(
         wait=wait_exponential(multiplier=5, min=15, max=60),
@@ -141,5 +144,8 @@ LƯU Ý: Mục "highlight_quotes" bắt buộc COPY Y HỆT từ văn bản và 
             contents=[pdf_file, prompt],
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
-        return json.loads(response.text)
+        data = json.loads(response.text)
+        if isinstance(data, list) and len(data) > 0:
+            return data[0]
+        return data
 
