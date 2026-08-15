@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, File, Form, Header, HTTPException, UploadFile
 
 from app.api.routers.document import get_db
-from app.models.schemas import AnalyzeDocumentRequest
+from app.models.schemas import AnalyzeDocumentRequest, NotebookLMJobRequest
 from app.services.gemini_service import GeminiService
 from app.services.graph_service import KnowledgeGraphManager
 from app.services import sheets_service
@@ -199,6 +199,45 @@ def _run_analyze_pdf_job(job_id: str, filename: str, content: bytes, api_key: st
                     pass
 
 
+def _run_notebooklm_job(job_id: str, req: NotebookLMJobRequest):
+    with _job_concurrency_gate:
+        try:
+            _set_job_running(job_id)
+            gemini = GeminiService(req.api_key)
+            result_json = gemini.format_raw_text(req.text)
+
+            # The user's primary outcome is the Sheet row. Persist it before
+            # reporting success; vector/graph indexing is secondary and best-effort.
+            if req.spreadsheet_id:
+                sheets_service.append_main_document_row(
+                    req.spreadsheet_id,
+                    "Dán từ NotebookLM (Web App)",
+                    "Dán văn bản (NotebookLM)",
+                    "",
+                    result_json,
+                )
+            _set_job_success(job_id, result_json)
+
+            try:
+                db = get_db(req.pinecone_api_key, req.api_key, req.workspace_id or "")
+                db.add_document({
+                    "filename": "NotebookLM_Extract",
+                    "text": req.text,
+                    "authors": result_json.get("authors", ""),
+                    "year": result_json.get("year", ""),
+                    "theory": result_json.get("theory", ""),
+                    "methodology": result_json.get("methodology", ""),
+                })
+                kg = KnowledgeGraphManager()
+                kg.add_paper_and_references(result_json)
+                kg.save_graph()
+            except Exception as e:
+                logger.error(f"NotebookLM post-processing failed for job {job_id}: {e}")
+        except Exception as e:
+            logger.error(f"Error in NotebookLM job {job_id}: {e}")
+            _set_job_error(job_id, handle_api_error(e, "notebooklm_job"))
+
+
 def _reject_if_duplicate(filename: str, api_key: str, pinecone_api_key: str, workspace_id: str = ""):
     # Kiểm tra trùng lặp TRƯỚC khi tạo job/gọi Gemini - tốn 1 lượt query Pinecone (nhanh,
     # rẻ) để tránh tốn hẳn 1 lượt phân tích Gemini (chậm, tốn tiền) cho tài liệu đã có.
@@ -248,6 +287,18 @@ async def submit_analyze_pdf_job(
         background_tasks.add_task(
             _run_analyze_pdf_job, job_id, file.filename, content, api_key, pinecone_api_key, spreadsheet_id, workspace_id
         )
+    return {"status": "success", "job_id": job_id}
+
+
+@router.post("/jobs/notebooklm")
+def submit_notebooklm_job(
+    req: NotebookLMJobRequest,
+    background_tasks: BackgroundTasks,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+):
+    job_id, created = _create_job("NotebookLM_Extract", idempotency_key)
+    if created:
+        background_tasks.add_task(_run_notebooklm_job, job_id, req)
     return {"status": "success", "job_id": job_id}
 
 

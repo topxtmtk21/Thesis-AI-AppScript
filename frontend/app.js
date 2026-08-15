@@ -12,7 +12,7 @@ function makeRequestId() {
 async function resilientFetch(input, init = {}) {
     const url = typeof input === 'string' ? input : input.url;
     const method = (init.method || 'GET').toUpperCase();
-    const isJobSubmission = /\/api\/jobs\/analyze-(text|pdf)/.test(url);
+    const isJobSubmission = /\/api\/jobs\/(analyze-(text|pdf)|notebooklm)/.test(url);
     const mayRetry = method === 'GET' || method === 'HEAD' || isJobSubmission || !url.includes('/api/sheets/append-row');
     const headers = new Headers(init.headers || {});
     headers.set('X-Request-ID', headers.get('X-Request-ID') || makeRequestId());
@@ -634,7 +634,7 @@ async function uploadFile(file) {
     }
 }
 
-async function processNotebookLMWeb() {
+async function processNotebookLMWebLegacy() {
     const text = document.getElementById('notebooklm-input').value.trim();
     const geminiKey = document.getElementById('global-gemini-key').value.trim();
     const statusDiv = document.getElementById('notebooklm-status');
@@ -828,6 +828,63 @@ LƯU Ý: "detailedFindings" liệt kê tối đa 8 phát hiện quan trọng nh�
 // =================================================================
 let currentReportText = "";
 let currentReportFilename = "report.md";
+
+async function processNotebookLMWeb() {
+    const text = document.getElementById('notebooklm-input').value.trim();
+    const geminiKey = document.getElementById('global-gemini-key').value.trim();
+    const pineconeKey = document.getElementById('global-pinecone-key').value.trim();
+    const backendUrl = document.getElementById('global-backend-url').value.trim().replace(/\/$/, "");
+    const spreadsheetId = getSpreadsheetId();
+    const statusDiv = document.getElementById('notebooklm-status');
+
+    if (!text) return showToast("Vui lòng dán văn bản từ NotebookLM", "warning");
+    if (!geminiKey || !pineconeKey || !backendUrl) {
+        openSettings();
+        return showToast("Vui lòng cấu hình Backend, Gemini và Pinecone API Key.", "error");
+    }
+    if (!spreadsheetId) {
+        openSettings();
+        document.getElementById('global-spreadsheet-id').focus();
+        return showToast("Vui lòng cấu hình Google Sheet đích.", "warning");
+    }
+
+    statusDiv.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xếp hàng phân tích...';
+    try {
+        const response = await fetch(`${backendUrl}/api/jobs/notebooklm`, {
+            method: 'POST',
+            headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+                text,
+                api_key: geminiKey,
+                pinecone_api_key: pineconeKey,
+                spreadsheet_id: spreadsheetId,
+                workspace_id: getWorkspaceId()
+            })
+        });
+        const submitted = await response.json().catch(() => ({}));
+        if (!response.ok || !submitted.job_id) throw new Error(submitted.detail || "Không thể gửi tác vụ.");
+
+        statusDiv.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang phân tích và ghi vào Sheet...';
+        for (let attempt = 0; attempt < 120; attempt++) {
+            await sleep(3000);
+            const poll = await fetch(`${backendUrl}/api/jobs/${submitted.job_id}`, { headers: getBackendHeaders() });
+            if (poll.status === 404) throw new Error("Tác vụ không còn tồn tại. Vui lòng gửi lại.");
+            const job = await poll.json();
+            if (job.status === 'success') {
+                statusDiv.innerHTML = '<i class="fa-solid fa-check" style="color: #10b981;"></i> Phân tích và lưu vào Sheet thành công.';
+                document.getElementById('notebooklm-input').value = '';
+                showToast("Đã lưu kết quả vào Google Sheet!", "success");
+                loadDocuments();
+                return;
+            }
+            if (job.status === 'error') throw new Error(job.error || "Không thể xử lý nội dung NotebookLM.");
+        }
+        throw new Error("Quá thời gian chờ. Tác vụ có thể vẫn đang chạy; hãy kiểm tra Sheet sau ít phút.");
+    } catch (error) {
+        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i> Lỗi: ${error.message}`;
+        showToast("Phân tích NotebookLM chưa hoàn tất.", "error");
+    }
+}
 
 function openReportModal(title, text, filename) {
     currentReportText = text;

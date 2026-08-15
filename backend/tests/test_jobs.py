@@ -85,6 +85,30 @@ def test_idempotency_key_returns_same_job_without_running_twice(client):
     assert first.json()["job_id"] == second.json()["job_id"]
 
 
+def test_notebooklm_job_writes_sheet_before_success(client):
+    class FakeNotebookGemini(FakeGemini):
+        def format_raw_text(self, text):
+            return {"authors": "A", "title": "Notebook result", "references": []}
+
+    with patch.object(jobs, "get_db", return_value=FakeDB()), \
+         patch.object(jobs, "GeminiService", FakeNotebookGemini), \
+         patch.object(jobs, "KnowledgeGraphManager", FakeKG), \
+         patch.object(jobs.sheets_service, "append_main_document_row") as append_sheet:
+        response = client.post("/api/jobs/notebooklm", json={
+            "text": "notebook text",
+            "api_key": "k",
+            "pinecone_api_key": "p",
+            "spreadsheet_id": "sheet123",
+        }, headers={"Idempotency-Key": "notebook-job"})
+        job_id = response.json()["job_id"]
+        result = _wait_for_terminal(client, job_id)
+
+    assert response.status_code == 200
+    assert result.json()["status"] == "success"
+    assert result.json()["data"]["title"] == "Notebook result"
+    append_sheet.assert_called_once()
+
+
 def test_submit_rejects_duplicate_before_calling_gemini(client):
     with patch.object(jobs, "get_db", return_value=FakeDB(existing_filenames=["dup.pdf"])):
         r = client.post("/api/jobs/analyze-text", json={

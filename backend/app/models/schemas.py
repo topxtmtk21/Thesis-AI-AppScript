@@ -22,6 +22,14 @@ class AnalyzeDocumentRequest(BaseModel):
     workspace_id: Optional[str] = None
 
 
+class NotebookLMJobRequest(BaseModel):
+    text: str
+    api_key: str
+    pinecone_api_key: str
+    spreadsheet_id: Optional[str] = ""
+    workspace_id: Optional[str] = None
+
+
 class ChatRequest(BaseModel):
     question: str
     api_key: str

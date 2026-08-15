@@ -146,7 +146,7 @@ function backendFetchWithRetry(url, options) {
   const requestOptions = Object.assign({}, options || {});
   requestOptions.headers = Object.assign({}, requestOptions.headers || {});
   requestOptions.headers['X-Request-ID'] = requestOptions.headers['X-Request-ID'] || Utilities.getUuid();
-  if (url.indexOf('/api/jobs/analyze-') !== -1) {
+  if (url.indexOf('/api/jobs/analyze-') !== -1 || url.indexOf('/api/jobs/notebooklm') !== -1) {
     requestOptions.headers['Idempotency-Key'] = requestOptions.headers['Idempotency-Key'] || Utilities.getUuid();
   }
 
@@ -444,8 +444,12 @@ function checkPendingJobs() {
 
   jobs.forEach(job => {
     const sheet = spreadsheet.getSheetByName(job.sheetName) || spreadsheet.getActiveSheet();
-    const sourceLabel = job.mode === 'advanced' ? "Quét thư mục (PDF gốc)" : "Quét thư mục (OCR)";
-    const methodLabel = job.mode === 'advanced' ? "Tự động (Vision AI)" : "Tự động (OCR)";
+    const sourceLabel = job.mode === 'notebooklm'
+      ? "Dán từ NotebookLM"
+      : (job.mode === 'advanced' ? "Quét thư mục (PDF gốc)" : "Quét thư mục (OCR)");
+    const methodLabel = job.mode === 'notebooklm'
+      ? "Thủ công"
+      : (job.mode === 'advanced' ? "Tự động (Vision AI)" : "Tự động (OCR)");
 
     if (Date.now() - job.submittedAt > JOB_TIMEOUT_MS) {
       appendErrorRow(sheet, job.fileName, sourceLabel, "Timeout: không nhận được phản hồi từ Backend sau 30 phút.");
@@ -1400,7 +1404,7 @@ function openNotebookLMDialog() {
       .showModalDialog(html, ' ');
 }
 
-function processNotebookLMText(text) {
+function processNotebookLMTextLegacy(text) {
   const ui = SpreadsheetApp.getUi();
   const userProperties = PropertiesService.getUserProperties();
   const apiKey = userProperties.getProperty('GEMINI_API_KEY');
@@ -1584,6 +1588,50 @@ LƯU Ý: "detailedFindings" liệt kê tối đa 8 phát hiện quan trọng nh�
 // =================================================================
 // 🚀 13. TÍCH HỢP NOTEBOOKLM (Ghi dữ liệu từ Web App)
 // =================================================================
+function processNotebookLMText(text) {
+  const props = PropertiesService.getUserProperties();
+  const backendUrl = props.getProperty('BACKEND_URL');
+  const apiKey = props.getProperty('GEMINI_API_KEY');
+  const pineconeKey = props.getProperty('PINECONE_API_KEY');
+  if (!backendUrl || !apiKey || !pineconeKey) {
+    throw new Error("Vui lòng cấu hình Backend URL, Gemini API Key và Pinecone API Key.");
+  }
+
+  const response = backendFetchWithRetry(backendUrl + "/api/jobs/notebooklm", {
+    method: "post",
+    contentType: "application/json",
+    headers: getBackendHeaders(),
+    payload: JSON.stringify({
+      text: text,
+      api_key: apiKey,
+      pinecone_api_key: pineconeKey,
+      workspace_id: getWorkspaceId()
+    }),
+    muteHttpExceptions: true
+  });
+  if (response.getResponseCode() !== 200) {
+    throw new Error("Không thể gửi tác vụ NotebookLM: " + response.getContentText());
+  }
+
+  const jobId = JSON.parse(response.getContentText()).job_id;
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  savePendingJobs(getPendingJobs().concat([{
+    jobId: jobId,
+    fileId: "",
+    fileName: "NotebookLM_Extract",
+    sheetName: sheet.getName(),
+    mode: "notebooklm",
+    submittedAt: Date.now()
+  }]));
+  ensurePollingTrigger();
+  SpreadsheetApp.getActiveSpreadsheet().toast(
+    "Đã xếp hàng phân tích NotebookLM. Kết quả sẽ tự ghi vào Sheet khi hoàn tất.",
+    "Đã gửi",
+    5
+  );
+  return {status: "queued", job_id: jobId};
+}
+
 function appendNotebookLMRow(result) {
   try {
     const sheetApp = SpreadsheetApp.getActiveSpreadsheet();
