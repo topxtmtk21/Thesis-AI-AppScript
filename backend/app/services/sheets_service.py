@@ -45,6 +45,20 @@ def get_sheets_client():
     return build("sheets", "v4", credentials=creds)
 
 
+def validate_spreadsheet_access(spreadsheet_id: str) -> dict:
+    if not spreadsheet_id:
+        raise ValueError("Thiếu Spreadsheet ID.")
+    service = get_sheets_client()
+    meta = service.spreadsheets().get(
+        spreadsheetId=spreadsheet_id,
+        fields="spreadsheetId,properties.title"
+    ).execute()
+    return {
+        "spreadsheet_id": meta.get("spreadsheetId", spreadsheet_id),
+        "title": meta.get("properties", {}).get("title", "")
+    }
+
+
 def _ensure_sheet_tab(service, spreadsheet_id: str, sheet_name: str, headers: list):
     meta = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
     existing_titles = [s["properties"]["title"] for s in meta.get("sheets", [])]

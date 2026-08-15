@@ -285,11 +285,24 @@ document.addEventListener('DOMContentLoaded', () => {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">Vui lòng nhập API Key trong phần Cài đặt.</td></tr>';
     
     // Nạp lại cấu hình từ Local Storage
-    const savedBackend = localStorage.getItem('backend_url');
+    let savedBackend = localStorage.getItem('backend_url');
     const savedGemini = localStorage.getItem('gemini_key');
     const savedPinecone = localStorage.getItem('pinecone_key');
     const savedSecret = localStorage.getItem('backend_secret');
-    const savedSpreadsheetId = localStorage.getItem('spreadsheet_id');
+    let savedSpreadsheetId = localStorage.getItem('spreadsheet_id');
+
+    if (!savedBackend && /^https?:$/.test(window.location.protocol)) {
+        savedBackend = window.location.origin;
+        localStorage.setItem('backend_url', savedBackend);
+    }
+    const spreadsheetFromUrl = normalizeSpreadsheetId(
+        new URLSearchParams(window.location.search).get('spreadsheet_id') ||
+        new URLSearchParams(window.location.search).get('sheet') || ''
+    );
+    if (spreadsheetFromUrl) {
+        savedSpreadsheetId = spreadsheetFromUrl;
+        localStorage.setItem('spreadsheet_id', spreadsheetFromUrl);
+    }
 
     if (savedBackend) document.getElementById('global-backend-url').value = savedBackend;
     if (savedGemini) document.getElementById('global-gemini-key').value = savedGemini;
@@ -319,7 +332,19 @@ function saveConfigToLocal(backendUrl, geminiKey, pineconeKey, backendSecret, sp
     if (geminiKey) localStorage.setItem('gemini_key', geminiKey);
     if (pineconeKey) localStorage.setItem('pinecone_key', pineconeKey);
     if (backendSecret) localStorage.setItem('backend_secret', backendSecret);
-    if (spreadsheetId) localStorage.setItem('spreadsheet_id', spreadsheetId);
+    if (spreadsheetId !== undefined) {
+        const normalizedId = normalizeSpreadsheetId(spreadsheetId);
+        if (normalizedId) localStorage.setItem('spreadsheet_id', normalizedId);
+        else localStorage.removeItem('spreadsheet_id');
+    }
+}
+
+function normalizeSpreadsheetId(value) {
+    const input = String(value || '').trim();
+    if (!input) return '';
+    const urlMatch = input.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+    const candidate = urlMatch ? urlMatch[1] : input;
+    return /^[a-zA-Z0-9_-]{20,}$/.test(candidate) ? candidate : '';
 }
 
 function getSpreadsheetId() {
@@ -349,14 +374,45 @@ function closeSettings() {
     document.getElementById('settings-modal').classList.remove('active');
 }
 
-function saveSettings() {
+async function saveSettings() {
     const backend = document.getElementById('global-backend-url').value.trim();
     const gemini = document.getElementById('global-gemini-key').value.trim();
     const pinecone = document.getElementById('global-pinecone-key').value.trim();
     const backendSecret = document.getElementById('global-backend-secret').value.trim();
-    const spreadsheetId = document.getElementById('global-spreadsheet-id').value.trim();
+    const spreadsheetInput = document.getElementById('global-spreadsheet-id');
+    const spreadsheetId = normalizeSpreadsheetId(spreadsheetInput.value);
+
+    if (spreadsheetInput.value.trim() && !spreadsheetId) {
+        showToast("URL hoặc Spreadsheet ID không hợp lệ.", "error");
+        spreadsheetInput.focus();
+        return;
+    }
+
+    const isStandalone = !(typeof google !== 'undefined' && google.script && google.script.run);
+    if (isStandalone && !spreadsheetId) {
+        showToast("Google Sheet đích là bắt buộc khi chạy trên Render.", "error");
+        spreadsheetInput.focus();
+        return;
+    }
+
+    if (isStandalone) {
+        try {
+            const validationHeaders = getBackendHeaders();
+            if (backendSecret) validationHeaders['X-Backend-Secret'] = backendSecret;
+            const response = await fetch(`${backend.replace(/\/$/, "")}/api/sheets/status?spreadsheet_id=${encodeURIComponent(spreadsheetId)}`, {
+                headers: validationHeaders
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.detail || "Backend không truy cập được Google Sheet.");
+        } catch (error) {
+            showToast(`Không thể kết nối Google Sheet: ${error.message}`, "error");
+            spreadsheetInput.focus();
+            return;
+        }
+    }
 
     saveConfigToLocal(backend, gemini, pinecone, backendSecret, spreadsheetId);
+    spreadsheetInput.value = spreadsheetId;
 
     // Đồng bộ cấu hình sang Google Sheets
     if (typeof google !== 'undefined' && google.script && google.script.run) {
@@ -589,6 +645,15 @@ async function processNotebookLMWeb() {
     }
     if (!geminiKey) {
         showToast("Vui lòng nhập Gemini API Key trong phần Cài đặt ở góc phải trên cùng", "error");
+        return;
+    }
+
+    const isStandalone = !(typeof google !== 'undefined' && google.script && google.script.run);
+    if (isStandalone && !getSpreadsheetId()) {
+        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b;"></i> Hãy cấu hình Google Sheet đích trước khi xử lý.`;
+        openSettings();
+        showToast("Dán URL Google Sheet vào Cài đặt và bấm Lưu.", "warning");
+        document.getElementById('global-spreadsheet-id').focus();
         return;
     }
     

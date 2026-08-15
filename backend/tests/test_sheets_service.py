@@ -44,6 +44,22 @@ def test_append_row_requires_spreadsheet_id():
         sheets_service.append_row("", "Sheet1", [], [])
 
 
+def test_validate_spreadsheet_access_returns_target(fake_service):
+    fake_service.spreadsheets().get().execute.return_value = {
+        "spreadsheetId": "sheet123",
+        "properties": {"title": "Research Data"}
+    }
+
+    result = sheets_service.validate_spreadsheet_access("sheet123")
+
+    assert result == {"spreadsheet_id": "sheet123", "title": "Research Data"}
+
+
+def test_validate_spreadsheet_access_requires_id():
+    with pytest.raises(ValueError):
+        sheets_service.validate_spreadsheet_access("")
+
+
 def test_append_news_analysis_row_maps_fields(fake_service):
     fake_service.spreadsheets().get().execute.return_value = {
         "sheets": [{"properties": {"title": sheets_service.NEWS_SHEET_NAME}}]

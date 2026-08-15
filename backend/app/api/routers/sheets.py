@@ -9,6 +9,16 @@ logger = get_logger("sheets_router")
 router = APIRouter()
 
 
+@router.get("/sheets/status")
+def sheet_status(spreadsheet_id: str):
+    try:
+        target = sheets_service.validate_spreadsheet_access(spreadsheet_id)
+        return {"status": "success", "configured": True, "target": target}
+    except Exception as e:
+        logger.error(f"Error validating spreadsheet access: {e}")
+        raise HTTPException(status_code=400, detail=handle_api_error(e, "sheets_status"))
+
+
 @router.post("/sheets/append-row")
 def append_row(req: AppendSheetRowRequest):
     # Dùng cho Web App đứng độc lập (không có google.script.run), ví dụ luồng dán

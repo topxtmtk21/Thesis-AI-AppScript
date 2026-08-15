@@ -407,9 +407,9 @@
                     <input type="password" id="global-backend-secret" class="field-input w-full rounded-lg px-4 py-2.5 text-sm" placeholder="Chỉ cần nếu Backend có bật xác thực">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Spreadsheet ID (Tuỳ chọn)</label>
-                    <input type="text" id="global-spreadsheet-id" class="field-input w-full rounded-lg px-4 py-2.5 text-sm" placeholder="ID của Google Sheet để ghi dữ liệu (kể cả khi dùng độc lập)">
-                    <p class="text-xs text-slate-400 mt-1">Lấy trong URL của Sheet: docs.google.com/spreadsheets/d/<b>ID</b>/edit. Cần chia sẻ Sheet cho email Service Account của Backend.</p>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1.5 uppercase">Google Sheet đích</label>
+                    <input type="text" id="global-spreadsheet-id" class="field-input w-full rounded-lg px-4 py-2.5 text-sm" placeholder="Dán URL Google Sheet hoặc Spreadsheet ID">
+                    <p class="text-xs text-slate-400 mt-1">Bắt buộc khi chạy trên Render. Sheet cần được chia sẻ quyền chỉnh sửa cho Service Account của Backend.</p>
                 </div>
             </div>
             <div class="px-8 py-5 border-t border-slate-100 flex items-center justify-end gap-3">

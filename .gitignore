@@ -9,6 +9,7 @@ backend/credentials.json
 backend/data/
 *.log
 .tmp/
+backend/.test-tmp-*/
 
 # File tạm/debug không thuộc source chính thức
 *_part*.txt
