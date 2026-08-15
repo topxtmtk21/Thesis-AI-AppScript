@@ -3,8 +3,21 @@ services:
     name: academic-ai-backend
     plan: free
     env: python
-    buildCommand: "pip install -r backend/requirements.txt"
+    buildCommand: "python -m pip install --upgrade pip && python -m pip install -r backend/requirements.txt"
     startCommand: "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
-        value: 3.10.0
+        value: 3.13.5
+      - key: BACKEND_SHARED_SECRET
+        sync: false
+      - key: BACKEND_CORS_ORIGINS
+        value: https://script.google.com,https://script.googleusercontent.com
+      - key: MAX_CONCURRENT_JOBS
+        value: "3"
+      - key: MAX_QUEUED_JOBS
+        value: "100"
+      - key: JOB_RESULT_TTL_SECONDS
+        value: "86400"
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false

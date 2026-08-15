@@ -55,4 +55,10 @@ jobs:
           --platform managed \
           --allow-unauthenticated \
           --memory 1Gi \
-          --cpu 1
+          --cpu 1 \
+          --min-instances 1 \
+          --max-instances 5 \
+          --concurrency 20 \
+          --timeout 900 \
+          --cpu-boost \
+          --set-env-vars BACKEND_SHARED_SECRET=${{ secrets.BACKEND_SHARED_SECRET }},BACKEND_CORS_ORIGINS=${{ secrets.BACKEND_CORS_ORIGINS }},MAX_CONCURRENT_JOBS=3,MAX_QUEUED_JOBS=100,JOB_RESULT_TTL_SECONDS=86400

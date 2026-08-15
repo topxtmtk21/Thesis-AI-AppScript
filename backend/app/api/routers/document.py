@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse, HTMLResponse
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import tempfile
 import fitz
 import os
@@ -37,16 +37,17 @@ def get_timeline():
 
 db_instances = {}
 
-def get_db(pinecone_key: str, gemini_key: str):
-    if pinecone_key not in db_instances:
-        db_instances[pinecone_key] = PineconeManager(pinecone_key, gemini_key)
-    return db_instances[pinecone_key]
+def get_db(pinecone_key: str, gemini_key: str, workspace_id: Optional[str] = None):
+    instance_key = (pinecone_key, workspace_id or "default")
+    if instance_key not in db_instances:
+        db_instances[instance_key] = PineconeManager(pinecone_key, gemini_key, namespace=workspace_id)
+    return db_instances[instance_key]
 
 @router.post("/analyze-and-process")
 def analyze_and_process(req: AnalyzeDocumentRequest):
     try:
         gemini = GeminiService(req.api_key)
-        db = get_db(req.pinecone_api_key, req.api_key)
+        db = get_db(req.pinecone_api_key, req.api_key, req.workspace_id)
         kg = KnowledgeGraphManager()
         
         result_json = gemini.analyze_document(req.text)
@@ -72,11 +73,12 @@ def analyze_and_process(req: AnalyzeDocumentRequest):
 async def analyze_pdf_blob(
     file: UploadFile = File(...),
     api_key: str = Form(...),
-    pinecone_api_key: str = Form(...)
+    pinecone_api_key: str = Form(...),
+    workspace_id: str = Form("")
 ):
     try:
         gemini = GeminiService(api_key)
-        db = get_db(pinecone_api_key, api_key)
+        db = get_db(pinecone_api_key, api_key, workspace_id)
         kg = KnowledgeGraphManager()
 
         temp_input = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
@@ -118,11 +120,12 @@ def synthesize_literature(req: SynthesisRequest):
 async def analyze_raw_text(
     text: str = Form(...),
     api_key: str = Form(...),
-    pinecone_api_key: str = Form(...)
+    pinecone_api_key: str = Form(...),
+    workspace_id: str = Form("")
 ):
     try:
         gemini = GeminiService(api_key)
-        db = get_db(pinecone_api_key, api_key)
+        db = get_db(pinecone_api_key, api_key, workspace_id)
         kg = KnowledgeGraphManager()
         
         result_json = gemini.format_raw_text(text)
@@ -146,9 +149,9 @@ async def analyze_raw_text(
         raise HTTPException(status_code=500, detail=friendly_error)
 
 @router.get("/documents")
-def get_documents(api_key: str, pinecone_api_key: str):
+def get_documents(api_key: str, pinecone_api_key: str, workspace_id: Optional[str] = None):
     try:
-        db = get_db(pinecone_api_key, api_key)
+        db = get_db(pinecone_api_key, api_key, workspace_id)
         docs = db.get_all_documents()
         return {"status": "success", "documents": docs}
     except Exception as e:
@@ -183,12 +186,13 @@ def export_ris(req: ExportRisRequest):
 async def upload_pdf(
     file: UploadFile = File(...),
     api_key: str = Form(...),
-    pinecone_api_key: str = Form(...)
+    pinecone_api_key: str = Form(...),
+    workspace_id: str = Form("")
 ):
     try:
         # 1. Khởi tạo các Service
         gemini = GeminiService(api_key)
-        db = get_db(pinecone_api_key, api_key)
+        db = get_db(pinecone_api_key, api_key, workspace_id)
         kg = KnowledgeGraphManager()
         drive = None
         try:

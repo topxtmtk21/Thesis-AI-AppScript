@@ -142,6 +142,40 @@ function getBackendHeaders() {
   return headers;
 }
 
+function backendFetchWithRetry(url, options) {
+  const requestOptions = Object.assign({}, options || {});
+  requestOptions.headers = Object.assign({}, requestOptions.headers || {});
+  requestOptions.headers['X-Request-ID'] = requestOptions.headers['X-Request-ID'] || Utilities.getUuid();
+  if (url.indexOf('/api/jobs/analyze-') !== -1) {
+    requestOptions.headers['Idempotency-Key'] = requestOptions.headers['Idempotency-Key'] || Utilities.getUuid();
+  }
+
+  const retryable = {408: true, 425: true, 429: true, 500: true, 502: true, 503: true, 504: true};
+  let lastError;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const response = UrlFetchApp.fetch(url, requestOptions);
+      if (!retryable[response.getResponseCode()] || attempt === 3) return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 3) throw error;
+    }
+    Utilities.sleep(Math.min(12000, 1000 * Math.pow(2, attempt)) + Math.floor(Math.random() * 500));
+  }
+  throw lastError || new Error('Backend request failed');
+}
+
+function getWorkspaceId() {
+  const props = PropertiesService.getUserProperties();
+  const storedId = props.getProperty('SPREADSHEET_ID');
+  if (storedId) return storedId;
+  try {
+    return SpreadsheetApp.getActiveSpreadsheet().getId();
+  } catch (e) {
+    return 'default';
+  }
+}
+
 // =================================================================
 // 🔗 GIAO DIỆN CẬP NHẬT NHANH BACKEND URL
 // =================================================================
@@ -422,7 +456,7 @@ function checkPendingJobs() {
 
     let response;
     try {
-      response = UrlFetchApp.fetch(`${backendUrl}/api/jobs/${job.jobId}`, {
+      response = backendFetchWithRetry(`${backendUrl}/api/jobs/${job.jobId}`, {
         method: "get",
         headers: getBackendHeaders(),
         muteHttpExceptions: true
@@ -540,10 +574,11 @@ function processNewDocuments() {
           filename: file.getName(),
           text: textContext,
           api_key: apiKey,
-          pinecone_api_key: pineconeKey
+          pinecone_api_key: pineconeKey,
+          workspace_id: getWorkspaceId()
         };
 
-        const response = UrlFetchApp.fetch(backendUrl + "/api/jobs/analyze-text", {
+        const response = backendFetchWithRetry(backendUrl + "/api/jobs/analyze-text", {
           method: "post",
           contentType: "application/json",
           headers: getBackendHeaders(),
@@ -662,10 +697,11 @@ function processChat(question, useSpecificFile = false) {
     question: question,
     api_key: apiKey,
     pinecone_api_key: pineconeKey,
-    filename: specificFilename
+    filename: specificFilename,
+    workspace_id: getWorkspaceId()
   };
 
-  const response = UrlFetchApp.fetch(backendUrl + "/api/chat", {
+  const response = backendFetchWithRetry(backendUrl + "/api/chat", {
     method: "post",
     contentType: "application/json",
     headers: getBackendHeaders(),
@@ -770,10 +806,11 @@ function processDocumentsAdvanced() {
         const payload = {
           file: file.getBlob(),
           api_key: apiKey,
-          pinecone_api_key: pineconeKey
+          pinecone_api_key: pineconeKey,
+          workspace_id: getWorkspaceId()
         };
 
-        const response = UrlFetchApp.fetch(backendUrl + "/api/jobs/analyze-pdf", {
+        const response = backendFetchWithRetry(backendUrl + "/api/jobs/analyze-pdf", {
           method: "post",
           headers: getBackendHeaders(),
           payload: payload,
@@ -888,10 +925,11 @@ function generateMatrixSynthesis() {
   try {
     const payload = {
       api_key: apiKey,
-      documents: documents
+      documents: documents,
+      workspace_id: getWorkspaceId()
     };
     
-    const response = UrlFetchApp.fetch(backendUrl + "/api/synthesis", {
+    const response = backendFetchWithRetry(backendUrl + "/api/synthesis", {
       method: "post",
       contentType: "application/json",
       headers: getBackendHeaders(),
@@ -1098,7 +1136,7 @@ function processNewsAnalysis(articles) {
     sheetApp.toast("Đang phân tích khung tin tức...", "📰 Đang xử lý", -1);
 
     const article = articles[0];
-    const response = UrlFetchApp.fetch(backendUrl + "/api/analyze-news", {
+    const response = backendFetchWithRetry(backendUrl + "/api/analyze-news", {
       method: "post",
       contentType: "application/json",
       headers: getBackendHeaders(),
@@ -1106,7 +1144,8 @@ function processNewsAnalysis(articles) {
         api_key: apiKey,
         text: article.text,
         source_name: article.source,
-        published_date: article.date
+        published_date: article.date,
+        workspace_id: getWorkspaceId()
       }),
       muteHttpExceptions: true
     });
@@ -1145,13 +1184,14 @@ function processNewsAnalysis(articles) {
     // 2-3 bài báo -> so sánh khung tin, xuất báo cáo ra Google Doc (giống Matrix Synthesis).
     sheetApp.toast("Đang so sánh khung tin giữa " + articles.length + " bài báo...", "📰 Đang xử lý", -1);
 
-    const response = UrlFetchApp.fetch(backendUrl + "/api/compare-news", {
+    const response = backendFetchWithRetry(backendUrl + "/api/compare-news", {
       method: "post",
       contentType: "application/json",
       headers: getBackendHeaders(),
       payload: JSON.stringify({
         api_key: apiKey,
-        articles: articles.map(a => ({ source: a.source || "Không rõ", text: a.text }))
+        articles: articles.map(a => ({ source: a.source || "Không rõ", text: a.text })),
+        workspace_id: getWorkspaceId()
       }),
       muteHttpExceptions: true
     });
@@ -1200,14 +1240,15 @@ function processInterviewCoding(transcript, intervieweeRole) {
   const sheetApp = SpreadsheetApp.getActiveSpreadsheet();
   sheetApp.toast("Đang mã hoá transcript phỏng vấn...", "🎙️ Đang xử lý", -1);
 
-  const response = UrlFetchApp.fetch(backendUrl + "/api/code-interview", {
+  const response = backendFetchWithRetry(backendUrl + "/api/code-interview", {
     method: "post",
     contentType: "application/json",
     headers: getBackendHeaders(),
     payload: JSON.stringify({
       api_key: apiKey,
       transcript: transcript,
-      interviewee_role: intervieweeRole
+      interviewee_role: intervieweeRole,
+      workspace_id: getWorkspaceId()
     }),
     muteHttpExceptions: true
   });

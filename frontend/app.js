@@ -1,3 +1,49 @@
+// Network requests occasionally hit a sleeping hosting instance or a transient
+// upstream overload. Keep one retry policy for the whole web app so every device
+// gets the same timeout and recovery behavior.
+const nativeFetch = window.fetch.bind(window);
+const RETRYABLE_HTTP_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+function makeRequestId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+async function resilientFetch(input, init = {}) {
+    const url = typeof input === 'string' ? input : input.url;
+    const method = (init.method || 'GET').toUpperCase();
+    const isJobSubmission = /\/api\/jobs\/analyze-(text|pdf)/.test(url);
+    const mayRetry = method === 'GET' || method === 'HEAD' || isJobSubmission || !url.includes('/api/sheets/append-row');
+    const headers = new Headers(init.headers || {});
+    headers.set('X-Request-ID', headers.get('X-Request-ID') || makeRequestId());
+    if (isJobSubmission && !headers.has('Idempotency-Key')) {
+        headers.set('Idempotency-Key', makeRequestId());
+    }
+
+    const attempts = mayRetry ? 4 : 1;
+    let lastError;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 45000);
+        try {
+            const response = await nativeFetch(input, { ...init, headers, signal: controller.signal });
+            if (!RETRYABLE_HTTP_STATUS.has(response.status) || attempt === attempts - 1) return response;
+            const retryAfter = Number(response.headers.get('Retry-After')) * 1000;
+            const delay = retryAfter || Math.min(12000, 1000 * (2 ** attempt)) + Math.random() * 500;
+            await new Promise(resolve => setTimeout(resolve, delay));
+        } catch (error) {
+            lastError = error;
+            if (attempt === attempts - 1) throw error;
+            await new Promise(resolve => setTimeout(resolve, Math.min(12000, 1000 * (2 ** attempt)) + Math.random() * 500));
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+    throw lastError || new Error('Request failed');
+}
+
+window.fetch = resilientFetch;
+
 // Tab Switching
 function switchTab(tabId, navEl) {
     // Update active nav link
@@ -58,7 +104,8 @@ async function loadDocuments() {
 
         const params = new URLSearchParams({
             api_key: geminiKey,
-            pinecone_api_key: pineconeKey
+            pinecone_api_key: pineconeKey,
+            workspace_id: getWorkspaceId()
         });
 
         const response = await fetch(`${backendUrl}/api/documents?` + params.toString(), {
@@ -210,7 +257,8 @@ async function sendMessage() {
             body: JSON.stringify({ 
                 question: text, 
                 api_key: geminiKey,
-                pinecone_api_key: pineconeKey
+                pinecone_api_key: pineconeKey,
+                workspace_id: getWorkspaceId()
             })
         });
         
@@ -276,6 +324,10 @@ function saveConfigToLocal(backendUrl, geminiKey, pineconeKey, backendSecret, sp
 
 function getSpreadsheetId() {
     return localStorage.getItem('spreadsheet_id') || '';
+}
+
+function getWorkspaceId() {
+    return getSpreadsheetId() || localStorage.getItem('workspace_id') || 'default';
 }
 
 // Header dùng chung cho mọi fetch() tới Backend: thêm X-Backend-Secret nếu người dùng
@@ -471,6 +523,7 @@ async function uploadFile(file) {
     formData.append("file", file);
     formData.append("api_key", geminiKey);
     formData.append("pinecone_api_key", pineconeKey);
+    formData.append("workspace_id", getWorkspaceId());
     const spreadsheetId = getSpreadsheetId();
     if (spreadsheetId) formData.append("spreadsheet_id", spreadsheetId);
 
@@ -685,7 +738,8 @@ LƯU Ý: "detailedFindings" liệt kê tối đa 8 phát hiện quan trọng nh�
                     source: "Dán từ NotebookLM (Web App)",
                     method: "Dán văn bản (NotebookLM)",
                     filename: "",
-                    result: result
+                    result: result,
+                    workspace_id: getWorkspaceId()
                 })
             });
             const sheetData = await sheetResponse.json();
@@ -762,7 +816,7 @@ async function synthesizeLiteratureReview() {
         const response = await fetch(`${backendUrl}/api/synthesis`, {
             method: 'POST',
             headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ api_key: geminiKey, documents: documents })
+            body: JSON.stringify({ api_key: geminiKey, documents: documents, workspace_id: getWorkspaceId() })
         });
         const data = await response.json();
         if (!response.ok || data.status !== 'success') {
@@ -829,7 +883,8 @@ async function submitNewsAnalysis() {
                 body: JSON.stringify({
                     api_key: geminiKey, text: articles[0].text,
                     source_name: articles[0].source, published_date: articles[0].date,
-                    spreadsheet_id: getSpreadsheetId()
+                    spreadsheet_id: getSpreadsheetId(),
+                    workspace_id: getWorkspaceId()
                 })
             });
             const data = await response.json();
@@ -856,7 +911,8 @@ async function submitNewsAnalysis() {
                 body: JSON.stringify({
                     api_key: geminiKey,
                     articles: articles.map(a => ({ source: a.source || "Không rõ", text: a.text })),
-                    spreadsheet_id: getSpreadsheetId()
+                    spreadsheet_id: getSpreadsheetId(),
+                    workspace_id: getWorkspaceId()
                 })
             });
             const data = await response.json();
@@ -927,7 +983,7 @@ async function submitInterviewCoding() {
         const response = await fetch(`${backendUrl}/api/code-interview`, {
             method: 'POST',
             headers: getBackendHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ api_key: geminiKey, transcript: transcript, interviewee_role: role, spreadsheet_id: getSpreadsheetId() })
+            body: JSON.stringify({ api_key: geminiKey, transcript: transcript, interviewee_role: role, spreadsheet_id: getSpreadsheetId(), workspace_id: getWorkspaceId() })
         });
         const data = await response.json();
         if (!response.ok || data.status !== 'success') throw new Error(data.detail || "Lỗi không xác định.");
@@ -1072,4 +1128,3 @@ function computeKappaWeb() {
     `;
     resultDiv.classList.remove('hidden');
 }
-

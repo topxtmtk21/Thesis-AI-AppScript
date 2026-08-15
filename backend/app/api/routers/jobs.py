@@ -8,7 +8,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Form, Header, HTTPException, UploadFile
 
 from app.api.routers.document import get_db
 from app.models.schemas import AnalyzeDocumentRequest
@@ -37,6 +37,8 @@ _DB_PATH = os.path.join(_DB_DIR, 'jobs.db')
 # hàng đợi ngay lập tức (job_id trả về tức thì) - chỉ phần xử lý nặng mới bị nghẽn cổ chai
 # có kiểm soát ở đây.
 _MAX_CONCURRENT_JOBS = int(os.environ.get("MAX_CONCURRENT_JOBS", "3"))
+_MAX_QUEUED_JOBS = int(os.environ.get("MAX_QUEUED_JOBS", "100"))
+_JOB_RESULT_TTL_SECONDS = int(os.environ.get("JOB_RESULT_TTL_SECONDS", "86400"))
 _job_concurrency_gate = threading.Semaphore(_MAX_CONCURRENT_JOBS)
 
 
@@ -55,44 +57,69 @@ def _init_db():
                 filename TEXT,
                 data TEXT,
                 error TEXT,
-                created_at REAL NOT NULL
+                created_at REAL NOT NULL,
+                updated_at REAL,
+                idempotency_key TEXT
             )
         """)
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
+        if "updated_at" not in columns:
+            conn.execute("ALTER TABLE jobs ADD COLUMN updated_at REAL")
+        if "idempotency_key" not in columns:
+            conn.execute("ALTER TABLE jobs ADD COLUMN idempotency_key TEXT")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idempotency ON jobs(idempotency_key) WHERE idempotency_key IS NOT NULL")
+        now = time.time()
+        conn.execute("UPDATE jobs SET status = 'error', error = ?, updated_at = ? WHERE status IN ('pending', 'running')", ("Backend restarted while this job was running. Please submit it again.", now))
+        conn.execute("DELETE FROM jobs WHERE COALESCE(updated_at, created_at) < ?", (now - _JOB_RESULT_TTL_SECONDS,))
 
 
 _init_db()
 
 
-def _create_job(filename: str) -> str:
+def _create_job(filename: str, idempotency_key: Optional[str] = None) -> tuple[str, bool]:
+    now = time.time()
     job_id = str(uuid.uuid4())
     with _get_conn() as conn:
+        active = conn.execute("SELECT COUNT(*) FROM jobs WHERE status IN ('pending', 'running')").fetchone()[0]
+        if active >= _MAX_QUEUED_JOBS:
+            raise HTTPException(status_code=429, detail="Backend is busy. Please retry shortly.", headers={"Retry-After": "15"})
+        if idempotency_key:
+            existing = conn.execute("SELECT id FROM jobs WHERE idempotency_key = ?", (idempotency_key,)).fetchone()
+            if existing:
+                return existing[0], False
         conn.execute(
-            "INSERT INTO jobs (id, status, filename, data, error, created_at) VALUES (?, 'pending', ?, NULL, NULL, ?)",
-            (job_id, filename, time.time())
+            "INSERT INTO jobs (id, status, filename, data, error, created_at, updated_at, idempotency_key) VALUES (?, 'pending', ?, NULL, NULL, ?, ?, ?)",
+            (job_id, filename, now, now, idempotency_key)
         )
-    return job_id
+    return job_id, True
 
 
 def _set_job_success(job_id: str, data: dict):
     with _get_conn() as conn:
         conn.execute(
-            "UPDATE jobs SET status = 'success', data = ? WHERE id = ?",
-            (json.dumps(data, ensure_ascii=False), job_id)
+            "UPDATE jobs SET status = 'success', data = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(data, ensure_ascii=False), time.time(), job_id)
         )
 
 
 def _set_job_error(job_id: str, error: str):
     with _get_conn() as conn:
-        conn.execute("UPDATE jobs SET status = 'error', error = ? WHERE id = ?", (error, job_id))
+        conn.execute("UPDATE jobs SET status = 'error', error = ?, updated_at = ? WHERE id = ?", (error, time.time(), job_id))
 
 
-def _run_analyze_text_job(job_id: str, filename: str, text: str, api_key: str, pinecone_api_key: str):
+def _set_job_running(job_id: str):
+    with _get_conn() as conn:
+        conn.execute("UPDATE jobs SET status = 'running', updated_at = ? WHERE id = ?", (time.time(), job_id))
+
+
+def _run_analyze_text_job(job_id: str, filename: str, text: str, api_key: str, pinecone_api_key: str, workspace_id: str = ""):
     # Chờ tới lượt nếu đã có _MAX_CONCURRENT_JOBS job khác đang xử lý - job vẫn ở
     # trạng thái "pending" trong lúc chờ, Apps Script poll vẫn thấy bình thường.
     with _job_concurrency_gate:
         try:
+            _set_job_running(job_id)
             gemini = GeminiService(api_key)
-            db = get_db(pinecone_api_key, api_key)
+            db = get_db(pinecone_api_key, api_key, workspace_id)
             kg = KnowledgeGraphManager()
 
             # Gemini phân tích nội dung và Pinecone băm+tính embedding là 2 việc độc lập
@@ -122,12 +149,13 @@ def _run_analyze_text_job(job_id: str, filename: str, text: str, api_key: str, p
             _set_job_error(job_id, handle_api_error(e, "analyze_text_job"))
 
 
-def _run_analyze_pdf_job(job_id: str, filename: str, content: bytes, api_key: str, pinecone_api_key: str, spreadsheet_id: str = ""):
+def _run_analyze_pdf_job(job_id: str, filename: str, content: bytes, api_key: str, pinecone_api_key: str, spreadsheet_id: str = "", workspace_id: str = ""):
     temp_path: Optional[str] = None
     with _job_concurrency_gate:
         try:
+            _set_job_running(job_id)
             gemini = GeminiService(api_key)
-            db = get_db(pinecone_api_key, api_key)
+            db = get_db(pinecone_api_key, api_key, workspace_id)
             kg = KnowledgeGraphManager()
 
             temp_input = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
@@ -171,11 +199,11 @@ def _run_analyze_pdf_job(job_id: str, filename: str, content: bytes, api_key: st
                     pass
 
 
-def _reject_if_duplicate(filename: str, api_key: str, pinecone_api_key: str):
+def _reject_if_duplicate(filename: str, api_key: str, pinecone_api_key: str, workspace_id: str = ""):
     # Kiểm tra trùng lặp TRƯỚC khi tạo job/gọi Gemini - tốn 1 lượt query Pinecone (nhanh,
     # rẻ) để tránh tốn hẳn 1 lượt phân tích Gemini (chậm, tốn tiền) cho tài liệu đã có.
     try:
-        db = get_db(pinecone_api_key, api_key)
+        db = get_db(pinecone_api_key, api_key, workspace_id)
         is_duplicate = db.check_document_exists(filename)
     except HTTPException:
         raise
@@ -193,12 +221,13 @@ def _reject_if_duplicate(filename: str, api_key: str, pinecone_api_key: str):
 
 
 @router.post("/jobs/analyze-text")
-def submit_analyze_text_job(req: AnalyzeDocumentRequest, background_tasks: BackgroundTasks):
-    _reject_if_duplicate(req.filename, req.api_key, req.pinecone_api_key)
-    job_id = _create_job(req.filename)
-    background_tasks.add_task(
-        _run_analyze_text_job, job_id, req.filename, req.text, req.api_key, req.pinecone_api_key
-    )
+def submit_analyze_text_job(req: AnalyzeDocumentRequest, background_tasks: BackgroundTasks, idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key")):
+    _reject_if_duplicate(req.filename, req.api_key, req.pinecone_api_key, req.workspace_id or "")
+    job_id, created = _create_job(req.filename, idempotency_key)
+    if created:
+        background_tasks.add_task(
+            _run_analyze_text_job, job_id, req.filename, req.text, req.api_key, req.pinecone_api_key, req.workspace_id or ""
+        )
     return {"status": "success", "job_id": job_id}
 
 
@@ -208,14 +237,17 @@ async def submit_analyze_pdf_job(
     file: UploadFile = File(...),
     api_key: str = Form(...),
     pinecone_api_key: str = Form(...),
-    spreadsheet_id: str = Form("")
+    spreadsheet_id: str = Form(""),
+    workspace_id: str = Form(""),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key")
 ):
-    _reject_if_duplicate(file.filename, api_key, pinecone_api_key)
+    _reject_if_duplicate(file.filename, api_key, pinecone_api_key, workspace_id)
     content = await file.read()
-    job_id = _create_job(file.filename)
-    background_tasks.add_task(
-        _run_analyze_pdf_job, job_id, file.filename, content, api_key, pinecone_api_key, spreadsheet_id
-    )
+    job_id, created = _create_job(file.filename, idempotency_key)
+    if created:
+        background_tasks.add_task(
+            _run_analyze_pdf_job, job_id, file.filename, content, api_key, pinecone_api_key, spreadsheet_id, workspace_id
+        )
     return {"status": "success", "job_id": job_id}
 
 
@@ -239,7 +271,4 @@ def get_job_status(job_id: str):
 
         # Job đã có kết quả cuối cùng (thành công hoặc lỗi) thì trả 1 lần rồi dọn khỏi DB,
         # tránh hàng đợi phình to vô hạn theo thời gian.
-        if status in ("success", "error"):
-            conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
-
         return result

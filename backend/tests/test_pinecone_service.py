@@ -39,6 +39,7 @@ def test_upsert_chunks_writes_metadata_and_batches():
     assert paper_id
     mgr.index.upsert.assert_called_once()
     vectors = mgr.index.upsert.call_args.kwargs["vectors"]
+    assert mgr.index.upsert.call_args.kwargs["namespace"] == "default"
     assert len(vectors) == 2
     assert vectors[0]["metadata"]["authors"] == "Smith"
     assert vectors[0]["metadata"]["text"] == "chunk a"
@@ -54,6 +55,7 @@ def test_add_document_wrapper_still_works_for_legacy_callers():
 
     assert paper_id
     mgr.index.upsert.assert_called_once()
+    assert mgr.index.upsert.call_args.kwargs["namespace"] == "default"
 
 
 def test_add_document_with_empty_text_is_a_noop():

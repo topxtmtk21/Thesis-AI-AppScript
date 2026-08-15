@@ -68,8 +68,21 @@ def test_submit_and_poll_success(client):
 
     assert r.json()["status"] == "success"
     assert r.json()["data"]["authors"] == "A"
-    # A terminal-status job is consumed (deleted) on first read.
-    assert client.get(f"/api/jobs/{job_id}").status_code == 404
+    # Results remain available so a transient client disconnect cannot consume them.
+    assert client.get(f"/api/jobs/{job_id}").json()["status"] == "success"
+
+
+def test_idempotency_key_returns_same_job_without_running_twice(client):
+    with patch.object(jobs, "get_db", return_value=FakeDB()), \
+         patch.object(jobs, "GeminiService", FakeGemini), \
+         patch.object(jobs, "KnowledgeGraphManager", FakeKG):
+        payload = {"filename": "same.pdf", "text": "hi", "api_key": "k", "pinecone_api_key": "p"}
+        first = client.post("/api/jobs/analyze-text", json=payload, headers={"Idempotency-Key": "stable-key"})
+        second = client.post("/api/jobs/analyze-text", json=payload, headers={"Idempotency-Key": "stable-key"})
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["job_id"] == second.json()["job_id"]
 
 
 def test_submit_rejects_duplicate_before_calling_gemini(client):

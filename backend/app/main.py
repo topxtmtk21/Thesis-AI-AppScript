@@ -2,6 +2,7 @@ from typing import Optional
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from google import genai
@@ -9,17 +10,27 @@ from google.genai import types
 from pinecone import Pinecone
 from app.api.routers import document, chat, jobs, research, sheets
 import os
+import time
+import uuid
 
 app = FastAPI(title="Academic Tool Backend API")
 
+def _get_cors_origins():
+    raw = os.environ.get("BACKEND_CORS_ORIGINS", "*").strip()
+    if not raw or raw == "*":
+        return ["*"]
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
 # Add CORS Middleware
+_cors_origins = _get_cors_origins()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials="*" not in _cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Backend không tự chứa secret nào cả - mọi Gemini/Pinecone key đều do client gửi kèm
 # mỗi request - nhưng nếu URL backend bị lộ, ai cũng gọi được API (tốn tài nguyên,
@@ -35,6 +46,8 @@ _SECRET_EXEMPT_PATHS = {"/api/graph", "/api/timeline"}
 
 @app.middleware("http")
 async def verify_backend_secret(request: Request, call_next):
+    request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    started_at = time.perf_counter()
     if (
         BACKEND_SHARED_SECRET
         and request.url.path.startswith("/api/")
@@ -45,7 +58,18 @@ async def verify_backend_secret(request: Request, call_next):
                 status_code=401,
                 content={"detail": "Unauthorized: thiếu hoặc sai header X-Backend-Secret."}
             )
-    return await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception:
+        response = JSONResponse(
+            status_code=500,
+            content={"detail": "Backend encountered an unexpected error.", "request_id": request_id},
+        )
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Response-Time-Ms"] = str(round((time.perf_counter() - started_at) * 1000))
+    if response.status_code in (429, 502, 503, 504) and "Retry-After" not in response.headers:
+        response.headers["Retry-After"] = "5"
+    return response
 
 
 # Include Routers

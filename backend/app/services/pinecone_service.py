@@ -5,11 +5,19 @@ import uuid
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 import json
+import re
+
+
+def normalize_namespace(workspace_id: str | None) -> str:
+    raw = (workspace_id or "default").strip()
+    namespace = re.sub(r"[^A-Za-z0-9_.-]+", "-", raw)[:120].strip("-._")
+    return namespace or "default"
 
 class PineconeManager:
-    def __init__(self, pinecone_api_key, gemini_api_key, index_name="academic-papers"):
+    def __init__(self, pinecone_api_key, gemini_api_key, index_name="academic-papers", namespace=None):
         self.pc = Pinecone(api_key=pinecone_api_key)
         self.index_name = index_name
+        self.namespace = normalize_namespace(namespace)
         self.client = genai.Client(api_key=gemini_api_key)
         
         # Kiểm tra và tạo index nếu chưa có
@@ -93,7 +101,7 @@ class PineconeManager:
                     "values": embeddings[j],
                     "metadata": meta
                 })
-            self.index.upsert(vectors=batch_vectors)
+            self.index.upsert(vectors=batch_vectors, namespace=self.namespace)
 
         print(f"Đã lưu vector lên Pinecone cho bài báo: {title} ({len(text_chunks)} chunks)")
         return paper_id
@@ -113,7 +121,8 @@ class PineconeManager:
         query_params = {
             "vector": query_vector,
             "top_k": top_k,
-            "include_metadata": True
+            "include_metadata": True,
+            "namespace": self.namespace
         }
         
         if filename:
@@ -131,7 +140,8 @@ class PineconeManager:
                 vector=dummy_vector,
                 top_k=1,
                 filter={"filename": {"$eq": filename}},
-                include_metadata=False
+                include_metadata=False,
+                namespace=self.namespace
             )
             return len(response['matches']) > 0
         except Exception as e:
@@ -145,7 +155,8 @@ class PineconeManager:
             response = self.index.query(
                 vector=dummy_vector,
                 top_k=5000,
-                include_metadata=True
+                include_metadata=True,
+                namespace=self.namespace
             )
             
             docs = {}

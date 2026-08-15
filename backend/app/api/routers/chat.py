@@ -8,7 +8,7 @@ router = APIRouter()
 @router.post("/chat")
 def chat_with_data(req: ChatRequest):
     try:
-        db = get_db(req.pinecone_api_key, req.api_key)
+        db = get_db(req.pinecone_api_key, req.api_key, req.workspace_id)
         
         # Lấy ngữ cảnh từ Pinecone
         results = db.search(req.question, top_k=3, filename=req.filename)
